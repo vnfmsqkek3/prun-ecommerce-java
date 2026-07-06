@@ -39,6 +39,7 @@ provider "aws" {
       Environment = title(var.environment)
       Project     = var.project
       Service     = "ecommerce"
+      Username    = "czy1023"
     }
   }
 }
@@ -62,6 +63,7 @@ locals {
     Environment = title(var.environment)
     Project     = var.project
     Service     = "ecommerce"
+    Username    = "czy1023"
   }
 
   # S3 시드 아티팩트 키 — 최초 부팅 시 백엔드 user-data 가 받는 jar.
