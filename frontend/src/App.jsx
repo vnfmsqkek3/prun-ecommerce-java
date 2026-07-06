@@ -19,6 +19,7 @@ function AppContent() {
     <Layout user={user} onLogout={logout}>
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/products" element={<Home />} />
         <Route path="/signup" element={<Signup />} />
         <Route path="/login" element={<Login />} />
         <Route path="/products/:id" element={<ProductDetail />} />
