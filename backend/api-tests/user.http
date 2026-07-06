@@ -1,0 +1,122 @@
+### 회원가입 - admin
+POST http://localhost:8080/api/users/signup
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "password123",
+  "name": "관리자",
+  "phoneNumber": "010-1234-5678"
+}
+
+### 회원가입 - 일반 사용자
+POST http://localhost:8080/api/users/signup
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "userpass123",
+  "name": "홍길동",
+  "phoneNumber": "010-9876-5432"
+}
+
+### 로그인 - admin
+POST http://localhost:8080/api/users/login
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "password123"
+}
+
+### 로그인 - 일반 사용자
+POST http://localhost:8080/api/users/login
+Content-Type: application/json
+
+{
+  "email": "user@example.com",
+  "password": "userpass123"
+}
+
+### 내 정보 조회 (userId를 헤더에 포함)
+GET http://localhost:8080/api/users/me
+X-User-Id: 1
+
+### 내 정보 수정
+PUT http://localhost:8080/api/users/me
+X-User-Id: 1
+Content-Type: application/json
+
+{
+  "name": "관리자(수정됨)",
+  "phoneNumber": "010-1111-1111"
+}
+
+### 비밀번호 변경
+PUT http://localhost:8080/api/users/me/password
+X-User-Id: 1
+Content-Type: application/json
+
+{
+  "currentPassword": "password123",
+  "newPassword": "newpassword123"
+}
+
+### 비밀번호 변경 후 로그인 테스트
+POST http://localhost:8080/api/users/login
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "newpassword123"
+}
+
+### 회원가입 - Validation 실패 테스트 (이메일 형식 오류)
+POST http://localhost:8080/api/users/signup
+Content-Type: application/json
+
+{
+  "email": "invalid-email",
+  "password": "password123",
+  "name": "테스트",
+  "phoneNumber": "010-1234-5678"
+}
+
+### 회원가입 - Validation 실패 테스트 (비밀번호 짧음)
+POST http://localhost:8080/api/users/signup
+Content-Type: application/json
+
+{
+  "email": "test@example.com",
+  "password": "short",
+  "name": "테스트",
+  "phoneNumber": "010-1234-5678"
+}
+
+### 로그인 - 실패 테스트 (잘못된 비밀번호)
+POST http://localhost:8080/api/users/login
+Content-Type: application/json
+
+{
+  "email": "admin@example.com",
+  "password": "wrongpassword"
+}
+
+### 비밀번호 변경 - 실패 테스트 (현재 비밀번호 불일치)
+PUT http://localhost:8080/api/users/me/password
+X-User-Id: 1
+Content-Type: application/json
+
+{
+  "currentPassword": "wrongpassword",
+  "newPassword": "newpassword456"
+}
+
+### 내 정보 수정 - Validation 실패 테스트 (이름 누락)
+PUT http://localhost:8080/api/users/me
+X-User-Id: 1
+Content-Type: application/json
+
+{
+  "phoneNumber": "010-2222-2222"
+}

@@ -1,0 +1,86 @@
+### 상품 등록
+POST http://localhost:8080/api/products
+Content-Type: application/json
+
+{
+  "name": "노트북",
+  "description": "고성능 노트북",
+  "price": 1500000,
+  "stockQuantity": 10,
+  "category": "ELECTRONICS",
+  "imageUrl": "https://example.com/laptop.jpg"
+}
+
+### 상품 등록 - 의류
+POST http://localhost:8080/api/products
+Content-Type: application/json
+
+{
+  "name": "티셔츠",
+  "description": "면 100% 티셔츠",
+  "price": 29000,
+  "stockQuantity": 50,
+  "category": "CLOTHING",
+  "imageUrl": "https://example.com/tshirt.jpg"
+}
+
+### 상품 등록 - 식품
+POST http://localhost:8080/api/products
+Content-Type: application/json
+
+{
+  "name": "사과",
+  "description": "신선한 사과",
+  "price": 5000,
+  "stockQuantity": 100,
+  "category": "FOOD",
+  "imageUrl": "https://example.com/apple.jpg"
+}
+
+### 상품 목록 조회 (페이징)
+GET http://localhost:8080/api/products?page=0&size=10
+
+### 상품 목록 조회 (카테고리 필터)
+GET http://localhost:8080/api/products?category=ELECTRONICS&page=0&size=10
+
+### 상품 상세 조회
+GET http://localhost:8080/api/products/1
+
+### 상품 수정
+PUT http://localhost:8080/api/products/1
+Content-Type: application/json
+
+{
+  "name": "노트북",
+  "description": "고성능 게이밍 노트북",
+  "price": 1800000,
+  "stockQuantity": 8,
+  "category": "ELECTRONICS",
+  "imageUrl": "https://example.com/gaming-laptop.jpg"
+}
+
+### 상품 삭제
+DELETE http://localhost:8080/api/products/1
+
+### 상품 등록 - Validation 실패 테스트 (가격 0)
+POST http://localhost:8080/api/products
+Content-Type: application/json
+
+{
+  "name": "테스트 상품",
+  "description": "테스트",
+  "price": 0,
+  "stockQuantity": 10,
+  "category": "ELECTRONICS"
+}
+
+### 상품 등록 - Validation 실패 테스트 (이름 누락)
+POST http://localhost:8080/api/products
+Content-Type: application/json
+
+{
+  "description": "테스트",
+  "price": 10000,
+  "stockQuantity": 10,
+  "category": "ELECTRONICS"
+}

@@ -1,0 +1,21 @@
+version: 0.2
+
+# CodeBuild: 소스는 repo 루트, 이 buildspec 경로는 frontend/buildspec.yml.
+# 산출물 번들 루트를 frontend/ 로 잡아 dist/ + appspec.yml + scripts/ 를 CodeDeploy 로 전달.
+phases:
+  install:
+    runtime-versions:
+      nodejs: 20
+  build:
+    commands:
+      - cd frontend
+      - npm ci
+      - npm run build
+      - chmod +x scripts/*.sh
+
+artifacts:
+  base-directory: frontend
+  files:
+    - dist/**/*
+    - appspec.yml
+    - scripts/**/*

@@ -1,0 +1,65 @@
+#!/bin/bash
+# =============================================================================
+# backend.sh.tftpl — app tier user-data (네이티브, Docker 미사용)
+# Corretto17 + systemd 로 app.jar 구동. env(DB/Redis)는 인프라가 주입(여기서 생성),
+# CodeDeploy 는 app.jar 만 교체하고 systemd 재시작 → env 는 유지.
+# =============================================================================
+set -euxo pipefail
+exec > >(tee -a /var/log/user-data.log) 2>&1
+
+REGION="${aws_region}"
+
+command -v aws >/dev/null 2>&1 || dnf install -y awscli-2 || dnf install -y aws-cli
+
+# 런타임 + CodeDeploy 에이전트 의존성
+dnf install -y java-17-amazon-corretto-headless ruby wget
+
+# CodeDeploy 에이전트
+cd /tmp
+wget -q "https://aws-codedeploy-$${REGION}.s3.$${REGION}.amazonaws.com/latest/install" -O codedeploy-install
+chmod +x codedeploy-install
+./codedeploy-install auto || true
+systemctl enable --now codedeploy-agent || true
+
+# 앱 디렉토리 + 환경파일 (인프라 제공값. CodeDeploy 배포가 건드리지 않음)
+install -d -o ec2-user -g ec2-user /opt/furn
+cat > /etc/furn-backend.env <<EOF
+SPRING_PROFILES_ACTIVE=prod
+DB_HOST=${db_host}
+DB_PORT=${db_port}
+DB_NAME=${db_name}
+DB_USERNAME=${db_username}
+DB_PASSWORD=$(aws ssm get-parameter --name "${db_password_param}" --with-decryption --query 'Parameter.Value' --output text --region "$${REGION}")
+REDIS_HOST=${redis_host}
+REDIS_PORT=${redis_port}
+EOF
+chmod 600 /etc/furn-backend.env
+
+# systemd 유닛
+cat > /etc/systemd/system/furn-backend.service <<'EOF'
+[Unit]
+Description=furn backend (Spring Boot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ec2-user
+EnvironmentFile=/etc/furn-backend.env
+ExecStart=/usr/bin/java -jar /opt/furn/app.jar
+SuccessExitStatus=143
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+
+# 초기 시드: S3 에 seed jar 가 있으면 받아서 기동 (이후 배포는 CodeDeploy)
+if aws s3 cp "s3://${artifact_bucket}/${seed_key}" /opt/furn/app.jar --region "$${REGION}"; then
+  chown ec2-user:ec2-user /opt/furn/app.jar
+  systemctl enable --now furn-backend
+else
+  echo "seed jar 없음 — CodeDeploy 첫 배포를 기다립니다."
+  systemctl enable furn-backend || true
+fi

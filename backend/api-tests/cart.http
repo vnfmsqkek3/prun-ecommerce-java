@@ -1,0 +1,69 @@
+### 장바구니에 상품 추가
+POST http://localhost:8080/api/carts/items
+X-User-Id: 1
+Content-Type: application/json
+
+{
+  "productId": 1,
+  "quantity": 2
+}
+
+### 장바구니에 상품 추가 - 다른 상품
+POST http://localhost:8080/api/carts/items
+X-User-Id: 1
+Content-Type: application/json
+
+{
+  "productId": 2,
+  "quantity": 1
+}
+
+### 장바구니에 상품 추가 - 중복 상품 (수량 증가)
+POST http://localhost:8080/api/carts/items
+X-User-Id: 1
+Content-Type: application/json
+
+{
+  "productId": 1,
+  "quantity": 1
+}
+
+### 장바구니 조회
+GET http://localhost:8080/api/carts
+X-User-Id: 1
+
+### 장바구니 상품 수량 변경
+PUT http://localhost:8080/api/carts/items/1
+X-User-Id: 1
+Content-Type: application/json
+
+{
+  "quantity": 5
+}
+
+### 장바구니 상품 삭제
+DELETE http://localhost:8080/api/carts/items/2
+X-User-Id: 1
+
+### 장바구니 전체 비우기
+DELETE http://localhost:8080/api/carts
+X-User-Id: 1
+
+### 장바구니에 상품 추가 - Validation 실패 (수량 0)
+POST http://localhost:8080/api/carts/items
+X-User-Id: 1
+Content-Type: application/json
+
+{
+  "productId": 1,
+  "quantity": 0
+}
+
+### 장바구니 상품 수량 변경 - Validation 실패 (수량 0)
+PUT http://localhost:8080/api/carts/items/1
+X-User-Id: 1
+Content-Type: application/json
+
+{
+  "quantity": 0
+}

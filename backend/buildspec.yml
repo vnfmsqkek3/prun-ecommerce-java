@@ -1,0 +1,25 @@
+version: 0.2
+
+# CodeBuild: 소스는 repo 루트, 이 buildspec 경로는 backend/buildspec.yml.
+# 산출물 번들 루트를 backend/ 로 잡아 app.jar + appspec.yml + scripts/ 를 CodeDeploy 로 전달.
+phases:
+  install:
+    runtime-versions:
+      java: corretto17
+  build:
+    commands:
+      - cd backend
+      - chmod +x gradlew
+      - if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then gradle wrapper; fi
+      - ./gradlew bootJar -x test
+  post_build:
+    commands:
+      - cp backend/build/libs/*.jar backend/app.jar
+      - chmod +x backend/scripts/*.sh
+
+artifacts:
+  base-directory: backend
+  files:
+    - app.jar
+    - appspec.yml
+    - scripts/**/*
