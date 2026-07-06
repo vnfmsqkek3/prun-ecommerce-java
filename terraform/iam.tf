@@ -1,7 +1,8 @@
 # =============================================================================
 # iam.tf — Backend EC2 Instance Role / Profile (최소 권한)
-#   app : S3 아티팩트 read + 미디어 버킷 RW(S3 endpoint 강제) + DB password SSM
-#         + SSM Session Manager + CloudWatch agent
+#   app : SSM Session Manager(core) + CloudWatch agent(관리형)
+#         + 인라인: S3 아티팩트 read, 미디어 RW(S3 endpoint 강제),
+#           SSM param(/furn/prod/*) read, KMS decrypt(ssm/s3 경유)
 # (프론트는 S3+CloudFront 서빙 → EC2 web 롤 없음. CI/CD 롤은 cicd.tf)
 # =============================================================================
 
@@ -66,11 +67,29 @@ data "aws_iam_policy_document" "app_inline" {
     }
   }
 
-  # DB password (SSM SecureString)
+  # SSM Parameter Store — 프로젝트 prefix(/furn/prod/*) 전체 읽기 (현재 db password, 향후 config 확장)
   statement {
-    sid       = "ReadDbPassword"
-    actions   = ["ssm:GetParameter", "ssm:GetParameters"]
-    resources = [aws_ssm_parameter.db_password.arn]
+    sid     = "ReadAppConfigSsm"
+    actions = ["ssm:GetParameter", "ssm:GetParameters", "ssm:GetParametersByPath"]
+    resources = [
+      "arn:${data.aws_partition.current.partition}:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${local.ssm_prefix}",
+      "arn:${data.aws_partition.current.partition}:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter${local.ssm_prefix}/*",
+    ]
+  }
+
+  # KMS — SSM SecureString 복호화 + (향후) S3 SSE-KMS 복호화. ssm/s3 서비스 경유로만 제한.
+  statement {
+    sid       = "KmsDecryptViaSsmS3"
+    actions   = ["kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"]
+    resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values = [
+        "ssm.${var.aws_region}.amazonaws.com",
+        "s3.${var.aws_region}.amazonaws.com",
+      ]
+    }
   }
 }
 
