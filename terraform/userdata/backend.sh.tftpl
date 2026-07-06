@@ -32,6 +32,8 @@ DB_USERNAME=${db_username}
 DB_PASSWORD=$(aws ssm get-parameter --name "${db_password_param}" --with-decryption --query 'Parameter.Value' --output text --region "$${REGION}")
 REDIS_HOST=${redis_host}
 REDIS_PORT=${redis_port}
+AWS_REGION=${aws_region}
+MEDIA_BUCKET=${media_bucket}
 EOF
 chmod 600 /etc/furn-backend.env
 

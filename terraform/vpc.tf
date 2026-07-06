@@ -1,13 +1,13 @@
 # =============================================================================
 # vpc.tf — Network layer
 # 모든 서브넷에 명시적 route table 연결. NAT Gateway 는 public subnet 에만 배치.
-# 서브넷 5 tier × 2 AZ = 10 subnets, RT: public 1 + web/app AZ별 2 + cache/db 각 1
-#   public : ALB(web), NAT GW, EICE
-#   web    : Frontend ASG (nginx)
-#   app    : Backend ASG (Spring) + Internal ALB
+# 서브넷 4 tier × 2 AZ = 8 subnets, RT: public 1 + app AZ별 2 + cache/db 각 1 = 5
+#   public : API ALB(internet-facing, CloudFront-locked), NAT GW, EICE
+#   app    : Backend ASG (Spring)
 #   cache  : ElastiCache Redis
 #   db     : RDS MySQL
-# CIDR: 10.100.0.0/20 → /24 (256 IP/subnet, AWS 예약 5개 제외 251 usable). idx 0~9 사용, 6 여유.
+# (프론트 정적은 S3+CloudFront 서빙 → 별도 EC2 web tier 없음)
+# CIDR: 10.100.0.0/20 → /24 (256 IP/subnet, AWS 예약 5개 제외 251 usable). idx 0~7 사용.
 # =============================================================================
 
 resource "aws_vpc" "main" {
@@ -40,23 +40,11 @@ resource "aws_subnet" "public" {
   })
 }
 
-# Private web (Frontend) — idx 2,3
-resource "aws_subnet" "private_web" {
-  for_each          = { for idx, az in local.azs : az => idx }
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = cidrsubnet(var.vpc_cidr, 4, each.value + 2)
-  availability_zone = each.key
-  tags = merge(local.common_tags, {
-    Name = "${local.name_prefix}-pri-sbn-web-${local.az_suffix[each.key]}"
-    Tier = "web"
-  })
-}
-
-# Private app (Backend / Internal ALB) — idx 4,5
+# Private app (Backend ASG) — idx 2,3
 resource "aws_subnet" "private_app" {
   for_each          = { for idx, az in local.azs : az => idx }
   vpc_id            = aws_vpc.main.id
-  cidr_block        = cidrsubnet(var.vpc_cidr, 4, each.value + 4)
+  cidr_block        = cidrsubnet(var.vpc_cidr, 4, each.value + 2)
   availability_zone = each.key
   tags = merge(local.common_tags, {
     Name = "${local.name_prefix}-pri-sbn-app-${local.az_suffix[each.key]}"
@@ -64,11 +52,11 @@ resource "aws_subnet" "private_app" {
   })
 }
 
-# Private cache (Redis) — idx 6,7
+# Private cache (Redis) — idx 4,5
 resource "aws_subnet" "private_cache" {
   for_each          = { for idx, az in local.azs : az => idx }
   vpc_id            = aws_vpc.main.id
-  cidr_block        = cidrsubnet(var.vpc_cidr, 4, each.value + 6)
+  cidr_block        = cidrsubnet(var.vpc_cidr, 4, each.value + 4)
   availability_zone = each.key
   tags = merge(local.common_tags, {
     Name = "${local.name_prefix}-pri-sbn-cache-${local.az_suffix[each.key]}"
@@ -76,11 +64,11 @@ resource "aws_subnet" "private_cache" {
   })
 }
 
-# Private db (RDS) — idx 8,9
+# Private db (RDS) — idx 6,7
 resource "aws_subnet" "private_db" {
   for_each          = { for idx, az in local.azs : az => idx }
   vpc_id            = aws_vpc.main.id
-  cidr_block        = cidrsubnet(var.vpc_cidr, 4, each.value + 8)
+  cidr_block        = cidrsubnet(var.vpc_cidr, 4, each.value + 6)
   availability_zone = each.key
   tags = merge(local.common_tags, {
     Name = "${local.name_prefix}-pri-sbn-db-${local.az_suffix[each.key]}"
@@ -127,26 +115,7 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
-# Private web — AZ별 RT (자기 AZ NAT 로 0/0 → ECR pull 등 outbound. AZ 장애 격리).
-resource "aws_route_table" "private_web" {
-  for_each = aws_subnet.private_web
-  vpc_id   = aws_vpc.main.id
-  route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.main[each.key].id
-  }
-  tags = merge(local.common_tags, {
-    Name = "${local.name_prefix}-pri-rtb-web-${local.az_suffix[each.key]}"
-  })
-}
-
-resource "aws_route_table_association" "private_web" {
-  for_each       = aws_subnet.private_web
-  subnet_id      = each.value.id
-  route_table_id = aws_route_table.private_web[each.key].id
-}
-
-# Private app — AZ별 RT (자기 AZ NAT 로 0/0 → ECR pull).
+# Private app — AZ별 RT (자기 AZ NAT 로 0/0 → SSM/CodeDeploy/dnf outbound. AZ 장애 격리).
 resource "aws_route_table" "private_app" {
   for_each = aws_subnet.private_app
   vpc_id   = aws_vpc.main.id
@@ -194,16 +163,13 @@ resource "aws_route_table_association" "private_db" {
 }
 
 # ---------- S3 Gateway VPC Endpoint ----------
-# ECR pull 시 이미지 레이어는 S3 에서 내려받음. web/app RT 에 endpoint 라우트 주입 →
-# 레이어 트래픽이 NAT 를 우회해 S3 로 직행 (데이터 전송비 절감).
+# 백엔드의 S3 트래픽(아티팩트 pull, 미디어 업로드, CodeDeploy 번들)이 NAT 가 아닌
+# 이 endpoint 로 직행. app RT 에 endpoint 라우트 주입 (미디어 IAM 도 이 endpoint 강제).
 resource "aws_vpc_endpoint" "s3" {
   vpc_id            = aws_vpc.main.id
   service_name      = "com.amazonaws.${var.aws_region}.s3"
   vpc_endpoint_type = "Gateway"
-  route_table_ids = concat(
-    [for rt in aws_route_table.private_web : rt.id],
-    [for rt in aws_route_table.private_app : rt.id],
-  )
+  route_table_ids   = [for rt in aws_route_table.private_app : rt.id]
   tags = merge(local.common_tags, {
     Name = "${local.name_prefix}-pri-vpce-s3"
   })

@@ -1,14 +1,13 @@
 # =============================================================================
-# cloudfront.tf — CDN (Public ALB 앞단)
-#   Internet ─HTTPS─▶ CloudFront ─HTTP─▶ Public ALB ─▶ Frontend ASG
-# 캐시 전략:
-#   /assets/*  : Vite 해시 불변 자산 → 엣지 캐싱 (CachingOptimized)
-#   그 외(default: index.html, /api, /actuator) : 캐시 안 함 + 쿠키/헤더 전달
-#     → SPA HTML 항상 최신, 세션 쿠키(SESSION) 정상 왕복.
-# 뷰어는 CloudFront 기본 인증서로 HTTPS 종료 (커스텀 도메인/ACM 미사용).
+# cloudfront.tf — 단일 CloudFront 에서 경로 분기
+#   default        → S3 static (SPA)           [OAC]
+#   /media/*       → S3 media  (업로드 이미지)  [OAC, 캐싱]
+#   /api/*         → API ALB   (동적)           [캐시 없음 + 쿠키/헤더 전달]
+#   /actuator/*    → API ALB   (헬스)
+# 뷰어는 CloudFront 기본 인증서로 HTTPS 종료. SPA 딥링크는 403/404 → index.html.
 # =============================================================================
 
-# ---------- AWS 관리형 정책 (ID 하드코딩 대신 이름으로 lookup) ----------
+# ---------- AWS 관리형 정책 ----------
 data "aws_cloudfront_cache_policy" "caching_optimized" {
   name = "Managed-CachingOptimized"
 }
@@ -21,6 +20,14 @@ data "aws_cloudfront_origin_request_policy" "all_viewer" {
   name = "Managed-AllViewer"
 }
 
+# ---------- OAC (S3 오리진 서명 접근) ----------
+resource "aws_cloudfront_origin_access_control" "s3" {
+  name                              = "${local.name_prefix}-s3-oac"
+  origin_access_control_origin_type = "s3"
+  signing_behavior                  = "always"
+  signing_protocol                  = "sigv4"
+}
+
 resource "aws_cloudfront_distribution" "main" {
   enabled             = true
   is_ipv6_enabled     = true
@@ -28,20 +35,57 @@ resource "aws_cloudfront_distribution" "main" {
   default_root_object = "index.html"
   price_class         = var.cloudfront_price_class
 
+  # 오리진 1 — 정적 SPA (S3)
   origin {
-    domain_name = aws_lb.web.dns_name
-    origin_id   = "${local.name_prefix}-web-alb"
+    domain_name              = aws_s3_bucket.static.bucket_regional_domain_name
+    origin_id                = "static-s3"
+    origin_access_control_id = aws_cloudfront_origin_access_control.s3.id
+  }
+
+  # 오리진 2 — 미디어 (S3)
+  origin {
+    domain_name              = aws_s3_bucket.media.bucket_regional_domain_name
+    origin_id                = "media-s3"
+    origin_access_control_id = aws_cloudfront_origin_access_control.s3.id
+  }
+
+  # 오리진 3 — API (ALB)
+  origin {
+    domain_name = aws_lb.api.dns_name
+    origin_id   = "api-alb"
     custom_origin_config {
       http_port              = 80
       https_port             = 443
-      origin_protocol_policy = "http-only" # ALB 는 HTTP 80 리스너만 운영
+      origin_protocol_policy = "http-only"
       origin_ssl_protocols   = ["TLSv1.2"]
     }
   }
 
-  # 기본: index.html + /api + /actuator — 캐시 없이 쿠키/헤더/쿼리 전달
+  # 기본 — 정적 SPA
   default_cache_behavior {
-    target_origin_id         = "${local.name_prefix}-web-alb"
+    target_origin_id       = "static-s3"
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+    cached_methods         = ["GET", "HEAD"]
+    cache_policy_id        = data.aws_cloudfront_cache_policy.caching_optimized.id
+    compress               = true
+  }
+
+  # /media/* — S3 미디어 (캐싱)
+  ordered_cache_behavior {
+    path_pattern           = "/media/*"
+    target_origin_id       = "media-s3"
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+    cached_methods         = ["GET", "HEAD"]
+    cache_policy_id        = data.aws_cloudfront_cache_policy.caching_optimized.id
+    compress               = true
+  }
+
+  # /api/* — 동적 (캐시 없음 + 쿠키/헤더 전달)
+  ordered_cache_behavior {
+    path_pattern             = "/api/*"
+    target_origin_id         = "api-alb"
     viewer_protocol_policy   = "redirect-to-https"
     allowed_methods          = ["GET", "HEAD", "OPTIONS", "PUT", "POST", "PATCH", "DELETE"]
     cached_methods           = ["GET", "HEAD"]
@@ -50,15 +94,29 @@ resource "aws_cloudfront_distribution" "main" {
     compress                 = true
   }
 
-  # 정적 해시 자산 — 엣지 캐싱
+  # /actuator/* — 헬스
   ordered_cache_behavior {
-    path_pattern           = "/assets/*"
-    target_origin_id       = "${local.name_prefix}-web-alb"
-    viewer_protocol_policy = "redirect-to-https"
-    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
-    cached_methods         = ["GET", "HEAD"]
-    cache_policy_id        = data.aws_cloudfront_cache_policy.caching_optimized.id
-    compress               = true
+    path_pattern             = "/actuator/*"
+    target_origin_id         = "api-alb"
+    viewer_protocol_policy   = "redirect-to-https"
+    allowed_methods          = ["GET", "HEAD", "OPTIONS"]
+    cached_methods           = ["GET", "HEAD"]
+    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_disabled.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.all_viewer.id
+  }
+
+  # SPA 딥링크: S3 가 없는 키에 403/404 → index.html 200
+  custom_error_response {
+    error_code            = 403
+    response_code         = 200
+    response_page_path    = "/index.html"
+    error_caching_min_ttl = 10
+  }
+  custom_error_response {
+    error_code            = 404
+    response_code         = 200
+    response_page_path    = "/index.html"
+    error_caching_min_ttl = 10
   }
 
   restrictions {
@@ -68,7 +126,7 @@ resource "aws_cloudfront_distribution" "main" {
   }
 
   viewer_certificate {
-    cloudfront_default_certificate = true # *.cloudfront.net 기본 인증서 (커스텀 도메인 시 ACM 로 교체)
+    cloudfront_default_certificate = true # 커스텀 도메인 시 ACM 로 교체
   }
 
   tags = merge(local.common_tags, { Name = "${local.name_prefix}-cdn" })

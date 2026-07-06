@@ -1,20 +1,21 @@
 # =============================================================================
 # main.tf — furn e-commerce 3-tier (nanoh2o 컨벤션 미러링)
 # 평탄 구조 (모듈 금지). 리소스는 서비스별 .tf 파일에 분리.
-#   - vpc.tf            : VPC / Subnet / IGW / NAT / Route Tables (5 tier)
-#   - security_group.tf : Security Groups (chain: web-alb→web→back-alb→app→rds/redis)
-#   - s3.tf             : 아티팩트 버킷 (seed + CodePipeline 저장소)
-#   - iam.tf            : EC2 Instance Roles / Profiles (S3 아티팩트 read + SSM)
+#   - vpc.tf            : VPC / Subnet / IGW / NAT / Route Tables (4 tier)
+#   - security_group.tf : Security Groups (chain: api-alb→app→rds/redis)
+#   - s3.tf             : 버킷 3종 (artifacts / static SPA / media)
+#   - iam.tf            : Backend Instance Role / Profile (S3 read+미디어 RW + SSM)
 #   - ssm.tf            : SSM Parameter Store (DB password SecureString)
 #   - rds.tf            : RDS MySQL Multi-AZ
 #   - elasticache.tf    : ElastiCache Redis (세션 저장소)
-#   - alb.tf            : Public ALB(web) + Internal ALB(back)
-#   - cloudfront.tf     : CloudFront CDN (Public ALB 앞단)
+#   - alb.tf            : API ALB (internet-facing, CloudFront 오리진)
+#   - cloudfront.tf     : CloudFront (정적 S3 / /media S3 / /api ALB 경로 분기)
 #   - ec2.tf            : AMI(AL2023) lookup + EC2 Instance Connect Endpoint
-#   - asg.tf            : Launch Template + ASG + scaling policy (web / app, 네이티브)
-#   - cicd.tf           : CodePipeline (GitHub → CodeBuild → CodeDeploy)
-# 3-tier 흐름: Internet → Public ALB → Frontend ASG(nginx)
-#              → Internal ALB → Backend ASG(Spring) → RDS MySQL + ElastiCache Redis
+#   - asg.tf            : Backend Launch Template + ASG + scaling policy (네이티브)
+#   - cicd.tf           : CodePipeline (GitHub → CodeBuild → CodeDeploy/S3)
+# 흐름: Internet → CloudFront ─┬─ 정적/미디어 → S3 (OAC)
+#                              └─ /api,/actuator → API ALB → Backend ASG(Spring)
+#                                                            → RDS MySQL + ElastiCache Redis
 # =============================================================================
 
 terraform {
@@ -63,8 +64,7 @@ locals {
     Service     = "ecommerce"
   }
 
-  # S3 시드 아티팩트 키 — 최초 부팅 시 user-data 가 받는 코드.
-  # 이후 배포는 CodePipeline → CodeBuild → CodeDeploy 가 ASG 인스턴스에 직접 배포.
-  backend_seed_key  = "seed/backend/app.jar"
-  frontend_seed_key = "seed/frontend/dist.tar.gz"
+  # S3 시드 아티팩트 키 — 최초 부팅 시 백엔드 user-data 가 받는 jar.
+  # 이후 배포는 CodePipeline → CodeBuild → CodeDeploy(백엔드) / S3 sync(프론트).
+  backend_seed_key = "seed/backend/app.jar"
 }

@@ -1,7 +1,8 @@
 # =============================================================================
 # security_group.tf — SG chain (최소권한, 인접 tier 만 허용)
-#   Internet → web-alb(80) → web(8080) → back-alb(8080) → app(8080) → rds(3306)/redis(6379)
-#   EICE → web/app (22)
+#   CloudFront → api-alb(80) → app(8080) → rds(3306)/redis(6379)
+#   EICE → app (22)
+# (정적은 S3+CloudFront 서빙 → web tier SG 없음)
 # =============================================================================
 
 # CloudFront edge 노드 IP 대역 (관리형 prefix list) — ALB 를 CloudFront 경유로만 노출.
@@ -9,10 +10,10 @@ data "aws_ec2_managed_prefix_list" "cloudfront" {
   name = "com.amazonaws.global.cloudfront.origin-facing"
 }
 
-# ---------- Public ALB (web) — CloudFront 에서만 HTTP 80 ----------
-resource "aws_security_group" "web_alb" {
-  name        = "${local.name_prefix}-pub-sg-web-alb"
-  description = "Public ALB - HTTP 80 from CloudFront edge only"
+# ---------- API ALB (internet-facing) — CloudFront 에서만 HTTP 80 ----------
+resource "aws_security_group" "api_alb" {
+  name        = "${local.name_prefix}-pub-sg-api-alb"
+  description = "API ALB - HTTP 80 from CloudFront edge only"
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -29,74 +30,21 @@ resource "aws_security_group" "web_alb" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-  tags = merge(local.common_tags, { Name = "${local.name_prefix}-pub-sg-web-alb" })
+  tags = merge(local.common_tags, { Name = "${local.name_prefix}-pub-sg-api-alb" })
 }
 
-# ---------- Frontend ASG (web) — Public ALB → 8080, EICE → 22 ----------
-resource "aws_security_group" "web" {
-  name        = "${local.name_prefix}-pri-sg-web"
-  description = "Frontend nginx - 8080 from public ALB, SSH from EICE"
-  vpc_id      = aws_vpc.main.id
-
-  ingress {
-    description     = "HTTP 8080 from public ALB"
-    from_port       = 8080
-    to_port         = 8080
-    protocol        = "tcp"
-    security_groups = [aws_security_group.web_alb.id]
-  }
-  ingress {
-    description     = "SSH from EC2 Instance Connect Endpoint"
-    from_port       = 22
-    to_port         = 22
-    protocol        = "tcp"
-    security_groups = [aws_security_group.eice.id]
-  }
-  egress {
-    description = "Allow all egress"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  tags = merge(local.common_tags, { Name = "${local.name_prefix}-pri-sg-web" })
-}
-
-# ---------- Internal ALB (back) — Frontend → 8080 ----------
-resource "aws_security_group" "back_alb" {
-  name        = "${local.name_prefix}-pri-sg-back-alb"
-  description = "Internal ALB - 8080 from frontend web SG"
-  vpc_id      = aws_vpc.main.id
-
-  ingress {
-    description     = "HTTP 8080 from frontend"
-    from_port       = 8080
-    to_port         = 8080
-    protocol        = "tcp"
-    security_groups = [aws_security_group.web.id]
-  }
-  egress {
-    description = "Allow all egress"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  tags = merge(local.common_tags, { Name = "${local.name_prefix}-pri-sg-back-alb" })
-}
-
-# ---------- Backend ASG (app) — Internal ALB → 8080, EICE → 22 ----------
+# ---------- Backend ASG (app) — API ALB → 8080, EICE → 22 ----------
 resource "aws_security_group" "app" {
   name        = "${local.name_prefix}-pri-sg-app"
-  description = "Backend Spring - 8080 from internal ALB, SSH from EICE"
+  description = "Backend Spring - 8080 from API ALB, SSH from EICE"
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description     = "HTTP 8080 from internal ALB"
+    description     = "HTTP 8080 from API ALB"
     from_port       = 8080
     to_port         = 8080
     protocol        = "tcp"
-    security_groups = [aws_security_group.back_alb.id]
+    security_groups = [aws_security_group.api_alb.id]
   }
   ingress {
     description     = "SSH from EC2 Instance Connect Endpoint"

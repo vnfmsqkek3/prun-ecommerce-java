@@ -67,43 +67,6 @@ variable "codebuild_image" {
   default     = "aws/codebuild/amazonlinux2-x86_64-standard:5.0"
 }
 
-# ---------- Frontend (web tier) ASG ----------
-variable "web_instance_type" {
-  description = "Frontend EC2 instance type"
-  type        = string
-  default     = "t3.small"
-}
-
-variable "web_root_volume_size_gb" {
-  description = "Frontend EBS gp3 root volume size in GB"
-  type        = number
-  default     = 20
-}
-
-variable "web_asg_min_size" {
-  description = "Frontend ASG minimum size"
-  type        = number
-  default     = 2
-}
-
-variable "web_asg_max_size" {
-  description = "Frontend ASG maximum size"
-  type        = number
-  default     = 6
-}
-
-variable "web_asg_desired_capacity" {
-  description = "Frontend ASG desired capacity"
-  type        = number
-  default     = 2
-}
-
-variable "web_asg_target_cpu_utilization" {
-  description = "Frontend ASG target tracking CPU utilization (%)"
-  type        = number
-  default     = 60
-}
-
 # ---------- Backend (app tier) ASG ----------
 variable "app_instance_type" {
   description = "Backend EC2 instance type"
@@ -154,14 +117,8 @@ variable "alb_idle_timeout_seconds" {
   default     = 60
 }
 
-variable "web_health_check_path" {
-  description = "Public ALB → frontend 헬스 체크 경로 (nginx)"
-  type        = string
-  default     = "/health"
-}
-
 variable "back_health_check_path" {
-  description = "Internal ALB → backend 헬스 체크 경로 (Spring actuator)"
+  description = "API ALB → backend 헬스 체크 경로 (Spring actuator)"
   type        = string
   default     = "/actuator/health"
 }

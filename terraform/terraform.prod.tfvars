@@ -19,13 +19,6 @@ github_owner  = "vnfmsqkek3"
 github_repo   = "prun-ecommerce-java"
 github_branch = "main"
 
-# Frontend (web) ASG
-web_instance_type              = "m5.large"
-web_asg_min_size               = 2
-web_asg_max_size               = 4
-web_asg_desired_capacity       = 2
-web_asg_target_cpu_utilization = 70
-
 # Backend (app) ASG
 app_instance_type              = "m5.large"
 app_asg_min_size               = 2

@@ -1,7 +1,7 @@
 # =============================================================================
-# cicd.tf — CodePipeline CI/CD (GitHub → CodeBuild → CodeDeploy)
-#   frontend / backend 각각 파이프라인 1개 (같은 repo 의 서브폴더 빌드).
-#   Source(GitHub) → Build(CodeBuild, 네이티브 아티팩트) → Deploy(CodeDeploy, ASG 인플레이스)
+# cicd.tf — CodePipeline CI/CD (GitHub source, 단일 repo 서브폴더 빌드)
+#   frontend : Source(GitHub) → Build(CodeBuild: npm build + S3 sync + CF 무효화)
+#   backend  : Source(GitHub) → Build(CodeBuild: jar 번들) → Deploy(CodeDeploy, ASG 인플레이스)
 # =============================================================================
 
 # ---------- GitHub 연결 (콘솔에서 최초 1회 'Pending → Available' 수동 승인 필요) ----------
@@ -36,10 +36,23 @@ data "aws_iam_policy_document" "codebuild_inline" {
     actions   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"]
     resources = ["*"]
   }
+  # 파이프라인 아티팩트
   statement {
-    sid       = "Artifacts"
+    sid       = "PipelineArtifacts"
     actions   = ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject", "s3:GetBucketLocation", "s3:ListBucket"]
     resources = [aws_s3_bucket.artifacts.arn, "${aws_s3_bucket.artifacts.arn}/*"]
+  }
+  # 프론트 정적 S3 sync
+  statement {
+    sid       = "StaticSync"
+    actions   = ["s3:PutObject", "s3:DeleteObject", "s3:GetObject", "s3:ListBucket"]
+    resources = [aws_s3_bucket.static.arn, "${aws_s3_bucket.static.arn}/*"]
+  }
+  # 프론트 배포 후 CloudFront 캐시 무효화
+  statement {
+    sid       = "Invalidate"
+    actions   = ["cloudfront:CreateInvalidation"]
+    resources = [aws_cloudfront_distribution.main.arn]
   }
 }
 
@@ -62,7 +75,16 @@ resource "aws_codebuild_project" "frontend" {
     compute_type    = "BUILD_GENERAL1_SMALL"
     image           = var.codebuild_image
     type            = "LINUX_CONTAINER"
-    privileged_mode = false # Docker 미사용
+    privileged_mode = false
+
+    environment_variable {
+      name  = "STATIC_BUCKET"
+      value = aws_s3_bucket.static.bucket
+    }
+    environment_variable {
+      name  = "CF_DIST_ID"
+      value = aws_cloudfront_distribution.main.id
+    }
   }
   tags = merge(local.common_tags, { Name = "${local.name_prefix}-build-frontend" })
 }
@@ -86,7 +108,7 @@ resource "aws_codebuild_project" "backend" {
 }
 
 # =============================================================================
-# CodeDeploy (Server 플랫폼, ASG 인플레이스 + TG 트래픽 제어)
+# CodeDeploy (backend only — Server 플랫폼, ASG 인플레이스 + TG 트래픽 제어)
 # =============================================================================
 data "aws_iam_policy_document" "codedeploy_assume" {
   statement {
@@ -109,36 +131,9 @@ resource "aws_iam_role_policy_attachment" "codedeploy" {
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AWSCodeDeployRole"
 }
 
-resource "aws_codedeploy_app" "frontend" {
-  name             = "${local.name_prefix}-frontend"
-  compute_platform = "Server"
-}
-
 resource "aws_codedeploy_app" "backend" {
   name             = "${local.name_prefix}-backend"
   compute_platform = "Server"
-}
-
-resource "aws_codedeploy_deployment_group" "frontend" {
-  app_name               = aws_codedeploy_app.frontend.name
-  deployment_group_name  = "${local.name_prefix}-web-dg"
-  service_role_arn       = aws_iam_role.codedeploy.arn
-  autoscaling_groups     = [aws_autoscaling_group.web.name]
-  deployment_config_name = "CodeDeployDefault.OneAtATime"
-
-  deployment_style {
-    deployment_type   = "IN_PLACE"
-    deployment_option = "WITH_TRAFFIC_CONTROL"
-  }
-  load_balancer_info {
-    target_group_info {
-      name = aws_lb_target_group.web.name
-    }
-  }
-  auto_rollback_configuration {
-    enabled = true
-    events  = ["DEPLOYMENT_FAILURE"]
-  }
 }
 
 resource "aws_codedeploy_deployment_group" "backend" {
@@ -154,7 +149,7 @@ resource "aws_codedeploy_deployment_group" "backend" {
   }
   load_balancer_info {
     target_group_info {
-      name = aws_lb_target_group.back.name
+      name = aws_lb_target_group.api.name
     }
   }
   auto_rollback_configuration {
@@ -218,6 +213,7 @@ resource "aws_iam_role_policy" "codepipeline_inline" {
   policy = data.aws_iam_policy_document.codepipeline_inline.json
 }
 
+# ---------- Frontend pipeline (Source → Build[S3 sync + CF 무효화]) ----------
 resource "aws_codepipeline" "frontend" {
   name     = "${local.name_prefix}-frontend-pipeline"
   role_arn = aws_iam_role.codepipeline.arn
@@ -248,31 +244,14 @@ resource "aws_codepipeline" "frontend" {
   stage {
     name = "Build"
     action {
-      name             = "Build"
-      category         = "Build"
-      owner            = "AWS"
-      provider         = "CodeBuild"
-      version          = "1"
-      input_artifacts  = ["source"]
-      output_artifacts = ["build"]
+      name            = "Build"
+      category        = "Build"
+      owner           = "AWS"
+      provider        = "CodeBuild"
+      version         = "1"
+      input_artifacts = ["source"]
       configuration = {
         ProjectName = aws_codebuild_project.frontend.name
-      }
-    }
-  }
-
-  stage {
-    name = "Deploy"
-    action {
-      name            = "Deploy"
-      category        = "Deploy"
-      owner           = "AWS"
-      provider        = "CodeDeploy"
-      version         = "1"
-      input_artifacts = ["build"]
-      configuration = {
-        ApplicationName     = aws_codedeploy_app.frontend.name
-        DeploymentGroupName = aws_codedeploy_deployment_group.frontend.deployment_group_name
       }
     }
   }
@@ -280,6 +259,7 @@ resource "aws_codepipeline" "frontend" {
   tags = merge(local.common_tags, { Name = "${local.name_prefix}-frontend-pipeline" })
 }
 
+# ---------- Backend pipeline (Source → Build → CodeDeploy) ----------
 resource "aws_codepipeline" "backend" {
   name     = "${local.name_prefix}-backend-pipeline"
   role_arn = aws_iam_role.codepipeline.arn

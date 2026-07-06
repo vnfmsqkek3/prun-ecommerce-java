@@ -1,8 +1,8 @@
 # =============================================================================
-# iam.tf — EC2 Instance Roles / Profiles (최소 권한)
-#   web  : S3 아티팩트 read + SSM Session Manager + CloudWatch agent
-#   app  : web 권한 + DB password SSM parameter 읽기
-# (CI/CD 서비스 롤 — CodeBuild/CodeDeploy/CodePipeline — 은 cicd.tf 에 있음)
+# iam.tf — Backend EC2 Instance Role / Profile (최소 권한)
+#   app : S3 아티팩트 read + 미디어 버킷 RW(S3 endpoint 강제) + DB password SSM
+#         + SSM Session Manager + CloudWatch agent
+# (프론트는 S3+CloudFront 서빙 → EC2 web 롤 없음. CI/CD 롤은 cicd.tf)
 # =============================================================================
 
 data "aws_iam_policy_document" "ec2_assume" {
@@ -15,49 +15,6 @@ data "aws_iam_policy_document" "ec2_assume" {
   }
 }
 
-# 인스턴스가 S3 아티팩트(seed + CodeDeploy 번들) 를 읽기 위한 공통 정책
-data "aws_iam_policy_document" "instance_artifacts" {
-  statement {
-    sid       = "ReadArtifacts"
-    actions   = ["s3:GetObject", "s3:GetObjectVersion"]
-    resources = ["${aws_s3_bucket.artifacts.arn}/*"]
-  }
-  statement {
-    sid       = "ListArtifacts"
-    actions   = ["s3:ListBucket"]
-    resources = [aws_s3_bucket.artifacts.arn]
-  }
-}
-
-# ---------- Frontend (web) role ----------
-resource "aws_iam_role" "web" {
-  name               = "${local.name_prefix}-web-role"
-  assume_role_policy = data.aws_iam_policy_document.ec2_assume.json
-  tags               = merge(local.common_tags, { Name = "${local.name_prefix}-web-role" })
-}
-
-resource "aws_iam_role_policy" "web_artifacts" {
-  name   = "${local.name_prefix}-web-artifacts"
-  role   = aws_iam_role.web.id
-  policy = data.aws_iam_policy_document.instance_artifacts.json
-}
-
-resource "aws_iam_role_policy_attachment" "web_ssm" {
-  role       = aws_iam_role.web.name
-  policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonSSMManagedInstanceCore"
-}
-
-resource "aws_iam_role_policy_attachment" "web_cw" {
-  role       = aws_iam_role.web.name
-  policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/CloudWatchAgentServerPolicy"
-}
-
-resource "aws_iam_instance_profile" "web" {
-  name = "${local.name_prefix}-web-profile"
-  role = aws_iam_role.web.name
-}
-
-# ---------- Backend (app) role ----------
 resource "aws_iam_role" "app" {
   name               = "${local.name_prefix}-app-role"
   assume_role_policy = data.aws_iam_policy_document.ec2_assume.json
@@ -74,10 +31,42 @@ resource "aws_iam_role_policy_attachment" "app_cw" {
   policy_arn = "arn:${data.aws_partition.current.partition}:iam::aws:policy/CloudWatchAgentServerPolicy"
 }
 
-# S3 아티팩트 read + DB password (SSM SecureString) 읽기
 data "aws_iam_policy_document" "app_inline" {
-  source_policy_documents = [data.aws_iam_policy_document.instance_artifacts.json]
+  # 아티팩트(seed jar + CodeDeploy 번들) read
+  statement {
+    sid       = "ReadArtifacts"
+    actions   = ["s3:GetObject", "s3:GetObjectVersion"]
+    resources = ["${aws_s3_bucket.artifacts.arn}/*"]
+  }
+  statement {
+    sid       = "ListArtifacts"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.artifacts.arn]
+  }
 
+  # 미디어 버킷 데이터플레인 RW — S3 Gateway Endpoint 경유 강제 (자격증명 유출 시 외부 직접 호출 차단)
+  statement {
+    sid       = "MediaReadWriteViaVpce"
+    actions   = ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]
+    resources = ["${aws_s3_bucket.media.arn}/*"]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceVpce"
+      values   = [aws_vpc_endpoint.s3.id]
+    }
+  }
+  statement {
+    sid       = "MediaListViaVpce"
+    actions   = ["s3:ListBucket"]
+    resources = [aws_s3_bucket.media.arn]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceVpce"
+      values   = [aws_vpc_endpoint.s3.id]
+    }
+  }
+
+  # DB password (SSM SecureString)
   statement {
     sid       = "ReadDbPassword"
     actions   = ["ssm:GetParameter", "ssm:GetParameters"]

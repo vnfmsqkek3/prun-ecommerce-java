@@ -1,7 +1,9 @@
 version: 0.2
 
 # CodeBuild: 소스는 repo 루트, 이 buildspec 경로는 frontend/buildspec.yml.
-# 산출물 번들 루트를 frontend/ 로 잡아 dist/ + appspec.yml + scripts/ 를 CodeDeploy 로 전달.
+# 정적 빌드 → S3 static 버킷 sync → CloudFront 캐시 무효화.
+# STATIC_BUCKET / CF_DIST_ID 는 CodeBuild 프로젝트 환경변수(cicd.tf)로 주입.
+# env-config.js 는 same-origin(API_BASE_URL="") — /api 는 CloudFront 가 ALB 로 라우팅.
 phases:
   install:
     runtime-versions:
@@ -11,11 +13,8 @@ phases:
       - cd frontend
       - npm ci
       - npm run build
-      - chmod +x scripts/*.sh
-
-artifacts:
-  base-directory: frontend
-  files:
-    - dist/**/*
-    - appspec.yml
-    - scripts/**/*
+      - printf 'window.ENV={API_BASE_URL:"",STATIC_ASSETS_URL:""};' > dist/env-config.js
+  post_build:
+    commands:
+      - aws s3 sync frontend/dist/ "s3://$STATIC_BUCKET/" --delete
+      - aws cloudfront create-invalidation --distribution-id "$CF_DIST_ID" --paths '/*'
