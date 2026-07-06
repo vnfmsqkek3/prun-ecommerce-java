@@ -23,9 +23,9 @@ variable "project" {
 
 # ---------- Network ----------
 variable "vpc_cidr" {
-  description = "VPC CIDR (10.100.0.0/24 — 256 IP, /28 subnet 16개 중 5 tier × 2 AZ = 10개 사용)"
+  description = "VPC CIDR (10.100.0.0/20 — 4096 IP, /24 subnet 16개 중 5 tier × 2 AZ = 10개 사용)"
   type        = string
-  default     = "10.100.0.0/24"
+  default     = "10.100.0.0/20"
 }
 
 variable "az_letters" {
