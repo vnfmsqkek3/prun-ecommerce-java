@@ -25,7 +25,8 @@ resource "aws_launch_template" "app" {
   name_prefix   = "${local.name_prefix}-pri-lt-app-"
   image_id      = data.aws_ami.al2023.id
   instance_type = var.app_instance_type
-  key_name      = var.ssh_key_name
+  # keyless — 접속은 EC2 Instance Connect Endpoint(ec2.tf)로. key pair 쓰려면 var 설정.
+  key_name = var.ssh_key_name != "" ? var.ssh_key_name : null
 
   iam_instance_profile {
     name = aws_iam_instance_profile.app.name
@@ -70,6 +71,8 @@ resource "aws_autoscaling_group" "app" {
   target_group_arns         = [aws_lb_target_group.api.arn]
   health_check_type         = "ELB"
   health_check_grace_period = var.asg_health_check_grace_seconds
+  # 인프라 먼저 apply — seed jar/CodeDeploy 배포 전이라 헬스 대기하지 않음(안 그러면 apply 타임아웃).
+  wait_for_capacity_timeout = "0"
 
   launch_template {
     id      = aws_launch_template.app.id

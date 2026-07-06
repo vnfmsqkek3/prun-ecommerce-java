@@ -1,6 +1,6 @@
 # =============================================================================
 # ec2.tf — AMI lookup + EC2 Instance Connect Endpoint
-# ASG 인스턴스는 AL2023 위에서 docker 로 ECR 이미지를 구동 (asg.tf user-data).
+# 백엔드 ASG 인스턴스는 keyless. 접속은 EICE 로 (bastion/key pair 불필요).
 # =============================================================================
 
 # ASG 런치 템플릿이 사용할 Amazon Linux 2023 latest AMI
@@ -22,7 +22,7 @@ data "aws_ami" "al2023" {
 }
 
 # ---------- EC2 Instance Connect Endpoint ----------
-# Bastion 없이 콘솔/CLI 로 private web/app 인스턴스 SSH 접근 (단일 endpoint 가 VPC 커버).
+# Bastion/key pair 없이 콘솔/CLI 로 private app 인스턴스 SSH 접근 (keyless, 임시키 주입).
 resource "aws_ec2_instance_connect_endpoint" "main" {
   subnet_id          = aws_subnet.private_app[local.azs[0]].id
   security_group_ids = [aws_security_group.eice.id]

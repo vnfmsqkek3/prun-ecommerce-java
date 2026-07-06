@@ -11,8 +11,7 @@ project     = "furn"
 vpc_cidr   = "10.100.0.0/20"
 az_letters = ["a", "c"] # ap-northeast-2a, ap-northeast-2c → suffix "an2a", "an2c"
 
-# SSH (EICE 경유). 미리 생성해 둔 EC2 key pair 이름으로 교체.
-ssh_key_name = "furn-prod-ec2-keypair"
+# keyless — 접속은 EC2 Instance Connect Endpoint 로. (key pair 쓰려면 ssh_key_name 설정)
 
 # CI/CD (CodePipeline · GitHub)
 github_owner  = "vnfmsqkek3"

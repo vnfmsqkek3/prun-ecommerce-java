@@ -40,8 +40,9 @@ variable "az_letters" {
 
 # ---------- SSH ----------
 variable "ssh_key_name" {
-  description = "EC2 key pair name (EICE 경유 SSH 접속용)"
+  description = "EC2 key pair name. 빈 값이면 keyless (EC2 Instance Connect Endpoint 로 접속)."
   type        = string
+  default     = ""
 }
 
 # ---------- CI/CD (CodePipeline / GitHub) ----------
