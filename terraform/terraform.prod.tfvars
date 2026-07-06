@@ -7,8 +7,8 @@ aws_region  = "ap-northeast-2" # Seoul (앱 타임존 Asia/Seoul 과 일치)
 environment = "prod"
 project     = "furn"
 
-# Network — /20, 5 tier × 2 AZ = 10 subnets
-vpc_cidr   = "10.0.0.0/20"
+# Network — /24 (256 IP), 5 tier × 2 AZ = 10 subnets (각 /28)
+vpc_cidr   = "10.100.0.0/24"
 az_letters = ["a", "c"] # ap-northeast-2a, ap-northeast-2c → suffix "an2a", "an2c"
 
 # SSH (EICE 경유). 미리 생성해 둔 EC2 key pair 이름으로 교체.

@@ -7,7 +7,7 @@
 #   app    : Backend ASG (Spring) + Internal ALB
 #   cache  : ElastiCache Redis
 #   db     : RDS MySQL
-# CIDR: 10.0.0.0/20 → /24 (256 IP/subnet). idx 0~9 사용.
+# CIDR: 10.100.0.0/24 → /28 (16 IP/subnet, AWS 예약 5개 제외 11 usable). idx 0~9 사용.
 # =============================================================================
 
 resource "aws_vpc" "main" {
@@ -26,7 +26,7 @@ resource "aws_internet_gateway" "main" {
   })
 }
 
-# ---------- Subnets (newbits=4 → /24) ----------
+# ---------- Subnets (newbits=4 → /28) ----------
 # Public — idx 0,1
 resource "aws_subnet" "public" {
   for_each                = { for idx, az in local.azs : az => idx }
