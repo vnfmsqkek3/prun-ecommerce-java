@@ -11,6 +11,8 @@ const METHODS = [
 export default function Seats() {
   const { concertId } = useParams()
   const nav = useNavigate()
+  // 입장 토큰은 마운트 시 1번만 캡처 (예약 후 sessionStorage 를 지워도 재-네비게이션 방지)
+  const [token] = useState(() => sessionStorage.getItem(`token:${concertId}`))
   const [seats, setSeats] = useState([])
   const [selected, setSelected] = useState(null)
   const [email, setEmail] = useState(localStorage.getItem('email') || '')
@@ -18,14 +20,14 @@ export default function Seats() {
   const [method, setMethod] = useState('CARD')
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
-  const token = sessionStorage.getItem(`token:${concertId}`)
 
   const load = () => api.get(`/api/concerts/${concertId}/seats`).then(r => setSeats(r.data))
 
   useEffect(() => {
-    if (!token) { nav(`/queue/${concertId}`); return }
+    if (!token) { nav(`/queue/${concertId}`); return } // 토큰 없이 들어오면 대기열로
     load()
-  }, [concertId, token, nav])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const reserve = async () => {
     if (!selected || !email || !phone) { setMsg('좌석·이메일·전화번호를 입력하세요'); return }
@@ -37,11 +39,12 @@ export default function Seats() {
         token, email, phone, paymentMethod: method,
       })
       sessionStorage.removeItem(`token:${concertId}`)
-      nav('/complete', { state: { reservation: data } })
+      nav('/complete', { state: { reservation: data }, replace: true }) // replace: 뒤로가기로 좌석/대기열 복귀 방지
     } catch (e) {
       setMsg(e.response?.data?.message || '예약/결제에 실패했습니다')
       setSelected(null); load()
-    } finally { setBusy(false) }
+      setBusy(false)
+    }
   }
 
   const rows = [...new Set(seats.map(s => s.seatNo[0]))]

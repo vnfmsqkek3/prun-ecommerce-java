@@ -23,8 +23,8 @@ export default function Complete() {
         </div>
       ) : <p className="muted">예약 정보가 없습니다.</p>}
       <div className="btn-row">
-        <button onClick={() => nav('/lookup')}>예약확인</button>
-        <button className="ghost" onClick={() => nav('/')}>목록으로</button>
+        <button onClick={() => nav('/', { replace: true })}>처음으로 돌아가기</button>
+        <button className="ghost" onClick={() => nav('/lookup')}>예약확인</button>
       </div>
     </div>
   )
