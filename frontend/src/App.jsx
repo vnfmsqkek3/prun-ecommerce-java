@@ -1,61 +1,26 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { AuthProvider, useAuth } from './context/AuthContext';
-import Layout from './components/layout/Layout';
-import ProtectedRoute from './components/common/ProtectedRoute';
-import Home from './pages/Home';
-import Signup from './pages/Signup';
-import Login from './pages/Login';
-import Profile from './pages/Profile';
-import ProductDetail from './pages/ProductDetail';
-import Cart from './pages/Cart';
-import OrderList from './pages/OrderList';
-import OrderDetail from './pages/OrderDetail';
-import './styles/global.css';
+import { Routes, Route, Link } from 'react-router-dom'
+import Home from './pages/Home'
+import Queue from './pages/Queue'
+import Seats from './pages/Seats'
+import Complete from './pages/Complete'
+import Lookup from './pages/Lookup'
 
-function AppContent() {
-  const { user, logout } = useAuth();
-
+export default function App() {
   return (
-    <Layout user={user} onLogout={logout}>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/products" element={<Home />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/products/:id" element={<ProductDetail />} />
-        <Route path="/cart" element={
-          <ProtectedRoute>
-            <Cart />
-          </ProtectedRoute>
-        } />
-        <Route path="/orders" element={
-          <ProtectedRoute>
-            <OrderList />
-          </ProtectedRoute>
-        } />
-        <Route path="/orders/:id" element={
-          <ProtectedRoute>
-            <OrderDetail />
-          </ProtectedRoute>
-        } />
-        <Route path="/profile" element={
-          <ProtectedRoute>
-            <Profile />
-          </ProtectedRoute>
-        } />
-      </Routes>
-    </Layout>
-  );
+    <div className="app">
+      <header className="topbar">
+        <Link to="/" className="logo">🎟️ TICKETING</Link>
+        <Link to="/lookup" className="nav-link">예약확인</Link>
+      </header>
+      <main className="content">
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/queue/:concertId" element={<Queue />} />
+          <Route path="/seats/:concertId" element={<Seats />} />
+          <Route path="/complete" element={<Complete />} />
+          <Route path="/lookup" element={<Lookup />} />
+        </Routes>
+      </main>
+    </div>
+  )
 }
-
-function App() {
-  return (
-    <BrowserRouter>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
-    </BrowserRouter>
-  );
-}
-
-export default App;

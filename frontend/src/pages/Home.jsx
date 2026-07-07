@@ -1,88 +1,38 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { getProducts } from '../services/productService';
-import ProductList from '../components/product/ProductList';
-import Alert from '../components/common/Alert';
-import './Home.css';
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import api from '../api'
 
-const CATEGORIES = [
-  { value: '', label: '전체' },
-  { value: 'ELECTRONICS', label: '전자제품' },
-  { value: 'CLOTHING', label: '의류' },
-  { value: 'FOOD', label: '식품' },
-  { value: 'BOOK', label: '도서' },
-  { value: 'HOME', label: '생활용품' }
-];
-
-function Home() {
-  const navigate = useNavigate();
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [category, setCategory] = useState('');
-  const [page, setPage] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
+export default function Home() {
+  const [concerts, setConcerts] = useState([])
+  const [loading, setLoading] = useState(true)
+  const nav = useNavigate()
 
   useEffect(() => {
-    fetchProducts();
-  }, [category, page]);
+    api.get('/api/concerts')
+      .then(r => setConcerts(r.data))
+      .catch(() => setConcerts([]))
+      .finally(() => setLoading(false))
+  }, [])
 
-  const fetchProducts = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await getProducts(page, 20, category || undefined);
-      setProducts(data.content);
-      setTotalPages(data.totalPages);
-    } catch (err) {
-      setError('상품을 불러오는데 실패했습니다');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCategoryChange = (newCategory) => {
-    setCategory(newCategory);
-    setPage(0);
-  };
-
-  const handleProductClick = (productId) => {
-    navigate(`/products/${productId}`);
-  };
+  if (loading) return <p className="muted">불러오는 중…</p>
 
   return (
-    <div className="home-container">
-      <h1>상품 목록</h1>
-      
-      {error && <Alert type="error" message={error} onClose={() => setError(null)} />}
-      
-      <div className="category-tabs">
-        {CATEGORIES.map(cat => (
-          <button
-            key={cat.value}
-            className={`category-tab ${category === cat.value ? 'active' : ''}`}
-            onClick={() => handleCategoryChange(cat.value)}
-          >
-            {cat.label}
-          </button>
+    <>
+      <h1>공연 목록</h1>
+      <div className="grid">
+        {concerts.map(c => (
+          <div className="card" key={c.id}>
+            <img src={c.imageUrl} alt={c.title} />
+            <div className="card-body">
+              <h3>{c.title}</h3>
+              <p className="muted">{c.artist} · {c.venue}</p>
+              <p className="muted">{new Date(c.concertDate).toLocaleString('ko-KR')}</p>
+              <button onClick={() => nav(`/queue/${c.id}`)}>예매하기</button>
+            </div>
+          </div>
         ))}
+        {concerts.length === 0 && <p className="muted">공연이 없습니다.</p>}
       </div>
-      
-      <ProductList products={products} loading={loading} onProductClick={handleProductClick} />
-      
-      {totalPages > 1 && (
-        <div className="pagination">
-          <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={page === 0}>
-            이전
-          </button>
-          <span>{page + 1} / {totalPages}</span>
-          <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}>
-            다음
-          </button>
-        </div>
-      )}
-    </div>
-  );
+    </>
+  )
 }
-
-export default Home;

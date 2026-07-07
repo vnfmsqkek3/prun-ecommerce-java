@@ -1,0 +1,112 @@
+package com.example.queue;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ZSetOperations;
+import org.springframework.stereotype.Service;
+
+import java.time.Instant;
+import java.util.Set;
+import java.util.UUID;
+
+/**
+ * Redis Sorted Set 기반 대기열 ("redis" 프로파일에서 활성). 스케일아웃/운영용.
+ *   waiting:concert:{id}  ZSET  member=token, score=진입시각(ms)
+ *   active:concert:{id}   ZSET  member=token, score=만료시각(ms)
+ */
+@Service
+@Profile("redis")
+public class RedisQueueService implements QueueService {
+
+    private static final String WAITING = "waiting:concert:";
+    private static final String ACTIVE = "active:concert:";
+    private static final String CONCERTS = "queue:concerts";
+
+    private final StringRedisTemplate redis;
+
+    @Value("${queue.capacity:3}")
+    private int capacity;
+    @Value("${queue.admit-batch:1}")
+    private int admitBatch;
+    @Value("${queue.active-ttl-seconds:600}")
+    private long activeTtlSeconds;
+
+    public RedisQueueService(StringRedisTemplate redis) {
+        this.redis = redis;
+    }
+
+    @Override
+    public TokenStatus enter(Long concertId, String userId) {
+        String token = UUID.randomUUID().toString();
+        redis.opsForSet().add(CONCERTS, String.valueOf(concertId));
+        long now = Instant.now().toEpochMilli();
+        cleanExpired(concertId, now);
+        Long activeCount = redis.opsForZSet().zCard(active(concertId));
+        if (activeCount != null && activeCount < capacity) {
+            admit(concertId, token, now);
+            return new TokenStatus(token, "ONGOING", null, 0L, now + activeTtlSeconds * 1000);
+        }
+        redis.opsForZSet().add(waiting(concertId), token, now);
+        return status(concertId, token);
+    }
+
+    @Override
+    public TokenStatus status(Long concertId, String token) {
+        long now = Instant.now().toEpochMilli();
+        Double exp = redis.opsForZSet().score(active(concertId), token);
+        if (exp != null && exp > now) {
+            return new TokenStatus(token, "ONGOING", null, redis.opsForZSet().zCard(waiting(concertId)), exp.longValue());
+        }
+        Long rank = redis.opsForZSet().rank(waiting(concertId), token);
+        if (rank != null) {
+            return new TokenStatus(token, "WAIT", rank + 1, redis.opsForZSet().zCard(waiting(concertId)), null);
+        }
+        return new TokenStatus(token, "EXPIRED", null, 0L, null);
+    }
+
+    @Override
+    public boolean validate(Long concertId, String token) {
+        Double exp = redis.opsForZSet().score(active(concertId), token);
+        return exp != null && exp > Instant.now().toEpochMilli();
+    }
+
+    @Override
+    public void complete(Long concertId, String token) {
+        redis.opsForZSet().remove(active(concertId), token);
+    }
+
+    @Override
+    public void promoteAll() {
+        Set<String> concerts = redis.opsForSet().members(CONCERTS);
+        if (concerts == null) return;
+        long now = Instant.now().toEpochMilli();
+        for (String c : concerts) {
+            long concertId = Long.parseLong(c);
+            cleanExpired(concertId, now);
+            Long activeCount = redis.opsForZSet().zCard(active(concertId));
+            long slots = capacity - (activeCount == null ? 0 : activeCount);
+            if (slots <= 0) continue;
+            Set<ZSetOperations.TypedTuple<String>> popped =
+                    redis.opsForZSet().popMin(waiting(concertId), Math.min(slots, admitBatch));
+            if (popped != null) {
+                for (ZSetOperations.TypedTuple<String> t : popped) {
+                    if (t.getValue() != null) admit(concertId, t.getValue(), now);
+                }
+            }
+            Long remaining = redis.opsForZSet().zCard(waiting(concertId));
+            if (remaining == null || remaining == 0) redis.opsForSet().remove(CONCERTS, c);
+        }
+    }
+
+    private void admit(Long concertId, String token, long now) {
+        redis.opsForZSet().add(active(concertId), token, now + activeTtlSeconds * 1000);
+    }
+
+    private void cleanExpired(Long concertId, long now) {
+        redis.opsForZSet().removeRangeByScore(active(concertId), 0, now);
+    }
+
+    private String waiting(Long concertId) { return WAITING + concertId; }
+    private String active(Long concertId) { return ACTIVE + concertId; }
+}
