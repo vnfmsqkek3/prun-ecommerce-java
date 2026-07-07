@@ -70,5 +70,3 @@ backend → 같은 ALB로 /api/queue 호출(토큰 검증) — api_alb SG 에 ap
 - 카카오 알림톡은 `kakao_*` 변수(기본 빈값=로그) — 제공사 키 넣으면 실제 발송.
 - 배포: `terraform apply -var-file=terraform.prod.tfvars` → GitHub 연결 승인 →
   `terraform output initial_deploy_commands`(backend/queue seed jar + 프론트 S3 sync) → 이후 push 시 파이프라인 자동.
-
-> 참고: e-commerce 잔재(media S3 버킷 + CloudFront `/media/*`)는 티켓팅에서 미사용이나 무해하게 남아있음.

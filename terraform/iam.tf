@@ -45,28 +45,6 @@ data "aws_iam_policy_document" "app_inline" {
     resources = [aws_s3_bucket.artifacts.arn]
   }
 
-  # 미디어 버킷 데이터플레인 RW — S3 Gateway Endpoint 경유 강제 (자격증명 유출 시 외부 직접 호출 차단)
-  statement {
-    sid       = "MediaReadWriteViaVpce"
-    actions   = ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]
-    resources = ["${aws_s3_bucket.media.arn}/*"]
-    condition {
-      test     = "StringEquals"
-      variable = "aws:SourceVpce"
-      values   = [aws_vpc_endpoint.s3.id]
-    }
-  }
-  statement {
-    sid       = "MediaListViaVpce"
-    actions   = ["s3:ListBucket"]
-    resources = [aws_s3_bucket.media.arn]
-    condition {
-      test     = "StringEquals"
-      variable = "aws:SourceVpce"
-      values   = [aws_vpc_endpoint.s3.id]
-    }
-  }
-
   # SSM Parameter Store — 프로젝트 prefix(/furn/prod/*) 전체 읽기 (현재 db password, 향후 config 확장)
   statement {
     sid     = "ReadAppConfigSsm"

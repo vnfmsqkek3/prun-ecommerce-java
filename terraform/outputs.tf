@@ -27,11 +27,6 @@ output "static_bucket" {
   value       = aws_s3_bucket.static.bucket
 }
 
-output "media_bucket" {
-  description = "미디어(업로드 이미지) S3 버킷"
-  value       = aws_s3_bucket.media.bucket
-}
-
 output "artifact_bucket" {
   description = "아티팩트 버킷 (백엔드 seed + 파이프라인 저장소)"
   value       = aws_s3_bucket.artifacts.bucket

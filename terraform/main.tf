@@ -3,13 +3,13 @@
 # 평탄 구조 (모듈 금지). 리소스는 서비스별 .tf 파일에 분리.
 #   - vpc.tf            : VPC / Subnet / IGW / NAT / Route Tables (4 tier)
 #   - security_group.tf : Security Groups (chain: api-alb→app→rds/redis)
-#   - s3.tf             : 버킷 3종 (artifacts / static SPA / media)
+#   - s3.tf             : 버킷 2종 (artifacts / static SPA)
 #   - iam.tf            : Backend Instance Role / Profile (S3 read+미디어 RW + SSM)
 #   - ssm.tf            : SSM Parameter Store (DB password SecureString)
 #   - rds.tf            : RDS MySQL Multi-AZ
 #   - elasticache.tf    : ElastiCache Redis (세션 저장소)
 #   - alb.tf            : API ALB (internet-facing, CloudFront 오리진)
-#   - cloudfront.tf     : CloudFront (정적 S3 / /media S3 / /api ALB 경로 분기)
+#   - cloudfront.tf     : CloudFront (정적 S3 / /api ALB 경로 분기)
 #   - ec2.tf            : AMI(AL2023) lookup + EC2 Instance Connect Endpoint
 #   - asg.tf            : Backend Launch Template + ASG + scaling policy (네이티브)
 #   - cicd.tf           : CodePipeline (GitHub → CodeBuild → CodeDeploy/S3)

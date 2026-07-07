@@ -1,7 +1,6 @@
 # =============================================================================
 # cloudfront.tf — 단일 CloudFront 에서 경로 분기
 #   default        → S3 static (SPA)           [OAC]
-#   /media/*       → S3 media  (업로드 이미지)  [OAC, 캐싱]
 #   /api/*         → API ALB   (동적)           [캐시 없음 + 쿠키/헤더 전달]
 #   /actuator/*    → API ALB   (헬스)
 # 뷰어는 CloudFront 기본 인증서로 HTTPS 종료. SPA 딥링크는 403/404 → index.html.
@@ -42,14 +41,7 @@ resource "aws_cloudfront_distribution" "main" {
     origin_access_control_id = aws_cloudfront_origin_access_control.s3.id
   }
 
-  # 오리진 2 — 미디어 (S3)
-  origin {
-    domain_name              = aws_s3_bucket.media.bucket_regional_domain_name
-    origin_id                = "media-s3"
-    origin_access_control_id = aws_cloudfront_origin_access_control.s3.id
-  }
-
-  # 오리진 3 — API (ALB)
+  # 오리진 2 — API (ALB)
   origin {
     domain_name = aws_lb.api.dns_name
     origin_id   = "api-alb"
@@ -64,17 +56,6 @@ resource "aws_cloudfront_distribution" "main" {
   # 기본 — 정적 SPA
   default_cache_behavior {
     target_origin_id       = "static-s3"
-    viewer_protocol_policy = "redirect-to-https"
-    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
-    cached_methods         = ["GET", "HEAD"]
-    cache_policy_id        = data.aws_cloudfront_cache_policy.caching_optimized.id
-    compress               = true
-  }
-
-  # /media/* — S3 미디어 (캐싱)
-  ordered_cache_behavior {
-    path_pattern           = "/media/*"
-    target_origin_id       = "media-s3"
     viewer_protocol_policy = "redirect-to-https"
     allowed_methods        = ["GET", "HEAD", "OPTIONS"]
     cached_methods         = ["GET", "HEAD"]
