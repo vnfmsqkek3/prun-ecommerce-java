@@ -176,7 +176,7 @@ variable "db_allocated_storage_gb" {
 variable "db_name" {
   description = "Initial database name (application-prod.properties DB_NAME 기본값과 일치)"
   type        = string
-  default     = "ecommerce_prod"
+  default     = "ticketing"
 }
 
 variable "db_master_username" {
@@ -227,4 +227,47 @@ variable "cloudfront_price_class" {
   description = "CloudFront price class (PriceClass_100/200/All)"
   type        = string
   default     = "PriceClass_200"
+}
+
+# ---------- Queue server (대기열 티어) ----------
+variable "queue_instance_type" {
+  description = "Queue server EC2 instance type"
+  type        = string
+  default     = "t3.small"
+}
+variable "queue_asg_min_size" {
+  type    = number
+  default = 2
+}
+variable "queue_asg_max_size" {
+  type    = number
+  default = 4
+}
+variable "queue_asg_desired_capacity" {
+  type    = number
+  default = 2
+}
+variable "queue_capacity" {
+  description = "대기열 동시 입장(active) 최대 인원 (운영은 크게)"
+  type        = number
+  default     = 100
+}
+
+# ---------- 카카오 알림톡 (미설정 시 백엔드가 콘솔 로그) ----------
+variable "kakao_api_url" {
+  type    = string
+  default = ""
+}
+variable "kakao_api_key" {
+  type      = string
+  default   = ""
+  sensitive = true
+}
+variable "kakao_sender_key" {
+  type    = string
+  default = ""
+}
+variable "kakao_template_code" {
+  type    = string
+  default = ""
 }

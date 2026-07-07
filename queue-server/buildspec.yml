@@ -1,0 +1,23 @@
+version: 0.2
+
+# CodeBuild: 소스 루트, buildspec 경로 queue-server/buildspec.yml.
+# 번들 루트 queue-server → app.jar + appspec.yml + scripts/ 를 CodeDeploy 로.
+phases:
+  install:
+    runtime-versions:
+      java: corretto17
+  build:
+    commands:
+      - cd queue-server
+      - chmod +x gradlew
+      - if [ ! -f gradle/wrapper/gradle-wrapper.jar ]; then gradle wrapper; fi
+      - ./gradlew bootJar -x test
+      - cp build/libs/*.jar app.jar
+      - chmod +x scripts/*.sh
+
+artifacts:
+  base-directory: queue-server
+  files:
+    - app.jar
+    - appspec.yml
+    - scripts/**/*

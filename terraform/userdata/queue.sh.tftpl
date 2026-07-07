@@ -1,0 +1,53 @@
+#!/bin/bash
+# =============================================================================
+# queue.sh.tftpl — 대기열 서버 user-data (네이티브). redis 프로파일 → ElastiCache 공유.
+# =============================================================================
+set -euxo pipefail
+exec > >(tee -a /var/log/user-data.log) 2>&1
+
+REGION="${aws_region}"
+command -v aws >/dev/null 2>&1 || dnf install -y awscli-2 || dnf install -y aws-cli
+dnf install -y java-17-amazon-corretto-headless ruby wget
+
+# CodeDeploy 에이전트
+cd /tmp
+wget -q "https://aws-codedeploy-$${REGION}.s3.$${REGION}.amazonaws.com/latest/install" -O codedeploy-install
+chmod +x codedeploy-install
+./codedeploy-install auto || true
+systemctl enable --now codedeploy-agent || true
+
+install -d -o ec2-user -g ec2-user /opt/furn-queue
+cat > /etc/furn-queue.env <<EOF
+SPRING_PROFILES_ACTIVE=redis
+REDIS_HOST=${redis_host}
+REDIS_PORT=${redis_port}
+QUEUE_CAPACITY=${queue_capacity}
+EOF
+chmod 600 /etc/furn-queue.env
+
+cat > /etc/systemd/system/furn-queue.service <<'EOF'
+[Unit]
+Description=furn queue server (Spring Boot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=ec2-user
+EnvironmentFile=/etc/furn-queue.env
+ExecStart=/usr/bin/java -jar /opt/furn-queue/app.jar
+SuccessExitStatus=143
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+systemctl daemon-reload
+
+if aws s3 cp "s3://${artifact_bucket}/${seed_key}" /opt/furn-queue/app.jar --region "$${REGION}"; then
+  chown ec2-user:ec2-user /opt/furn-queue/app.jar
+  systemctl enable --now furn-queue
+else
+  echo "seed jar 없음 — CodeDeploy 첫 배포 대기"
+  systemctl enable furn-queue || true
+fi

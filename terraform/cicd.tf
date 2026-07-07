@@ -191,7 +191,7 @@ data "aws_iam_policy_document" "codepipeline_inline" {
   statement {
     sid       = "Build"
     actions   = ["codebuild:StartBuild", "codebuild:BatchGetBuilds"]
-    resources = [aws_codebuild_project.frontend.arn, aws_codebuild_project.backend.arn]
+    resources = [aws_codebuild_project.frontend.arn, aws_codebuild_project.backend.arn, aws_codebuild_project.queue.arn]
   }
   statement {
     sid = "Deploy"

@@ -29,7 +29,7 @@ app_asg_target_cpu_utilization = 70
 db_instance_class       = "db.t3.small"
 db_engine_version       = "8.0.42"
 db_allocated_storage_gb = 50
-db_name                 = "ecommerce_prod"
+db_name                 = "ticketing"
 db_master_username      = "furnadmin"
 db_multi_az             = true
 # 데모 기본값(간편 destroy). 실운영은 아래 두 줄을 true / false 로.

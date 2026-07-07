@@ -7,17 +7,19 @@
 
 locals {
   app_user_data = base64encode(templatefile("${path.module}/userdata/backend.sh.tftpl", {
-    aws_region        = var.aws_region
-    artifact_bucket   = aws_s3_bucket.artifacts.bucket
-    seed_key          = local.backend_seed_key
-    db_host           = aws_db_instance.main.address
-    db_port           = aws_db_instance.main.port
-    db_name           = var.db_name
-    db_username       = var.db_master_username
-    db_password_param = aws_ssm_parameter.db_password.name
-    redis_host        = aws_elasticache_replication_group.session.primary_endpoint_address
-    redis_port        = 6379
-    media_bucket      = aws_s3_bucket.media.bucket
+    aws_region          = var.aws_region
+    artifact_bucket     = aws_s3_bucket.artifacts.bucket
+    seed_key            = local.backend_seed_key
+    db_host             = aws_db_instance.main.address
+    db_port             = aws_db_instance.main.port
+    db_name             = var.db_name
+    db_username         = var.db_master_username
+    db_password_param   = aws_ssm_parameter.db_password.name
+    queue_server_url    = "http://${aws_lb.api.dns_name}" # 같은 ALB /api/queue 로 라우팅
+    kakao_api_url       = var.kakao_api_url
+    kakao_api_key       = var.kakao_api_key
+    kakao_sender_key    = var.kakao_sender_key
+    kakao_template_code = var.kakao_template_code
   }))
 }
 

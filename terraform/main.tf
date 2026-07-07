@@ -69,4 +69,5 @@ locals {
   # S3 시드 아티팩트 키 — 최초 부팅 시 백엔드 user-data 가 받는 jar.
   # 이후 배포는 CodePipeline → CodeBuild → CodeDeploy(백엔드) / S3 sync(프론트).
   backend_seed_key = "seed/backend/app.jar"
+  queue_seed_key   = "seed/queue/app.jar"
 }

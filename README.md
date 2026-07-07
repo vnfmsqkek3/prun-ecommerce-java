@@ -55,5 +55,20 @@ docker compose up --build
 | backend | GET | `/api/concerts` / `/{id}` / `/{id}/seats` | 공연/좌석 조회 |
 | backend | POST | `/api/reservations` | 좌석 예약(토큰 검증 + 비관적 락) |
 
-## AWS 배포 (다음 단계)
-`terraform/` 는 이전 e-commerce 기준이라, 콘서트 티켓팅용으로 **queue-server ASG 추가 + ALB 경로 분기(/api/queue → queue-server)** 를 반영해야 함. (로컬 검증 후 진행)
+## AWS 배포 (`terraform/`)
+기존 인프라를 재활용해 콘서트 티켓팅용으로 구성 완료:
+
+```
+CloudFront ─┬ default → S3 (React SPA)
+            └ /api/*  → API ALB(internet-facing, CloudFront-locked)
+                        ├ /api/queue/* → queue TG  → Queue ASG  ── ElastiCache(Redis, redis 프로파일)
+                        └ /api/*        → backend TG → Backend ASG ── RDS(MySQL)
+backend → 같은 ALB로 /api/queue 호출(토큰 검증) — api_alb SG 에 app SG 허용
+```
+- 티어: **backend ASG + queue ASG**(각 CodePipeline/CodeDeploy), 프론트 S3+CloudFront.
+- 대기열은 AWS 에선 **redis 프로파일**(ElastiCache 공유)로 스케일아웃.
+- 카카오 알림톡은 `kakao_*` 변수(기본 빈값=로그) — 제공사 키 넣으면 실제 발송.
+- 배포: `terraform apply -var-file=terraform.prod.tfvars` → GitHub 연결 승인 →
+  `terraform output initial_deploy_commands`(backend/queue seed jar + 프론트 S3 sync) → 이후 push 시 파이프라인 자동.
+
+> 참고: e-commerce 잔재(media S3 버킷 + CloudFront `/media/*`)는 티켓팅에서 미사용이나 무해하게 남아있음.

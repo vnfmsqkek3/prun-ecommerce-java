@@ -41,6 +41,7 @@ output "initial_deploy_commands" {
   description = "최초 배포 (파이프라인 없이 바로 올리기)"
   value = {
     backend_seed = "aws s3 cp backend/build/libs/*.jar s3://${aws_s3_bucket.artifacts.bucket}/${local.backend_seed_key}"
+    queue_seed   = "aws s3 cp queue-server/build/libs/*.jar s3://${aws_s3_bucket.artifacts.bucket}/${local.queue_seed_key}"
     frontend_static = join(" && ", [
       "cd frontend && npm ci && npm run build",
       "printf 'window.ENV={API_BASE_URL:\"\",STATIC_ASSETS_URL:\"\"};' > dist/env-config.js",
@@ -60,6 +61,7 @@ output "pipeline_names" {
   value = {
     frontend = aws_codepipeline.frontend.name
     backend  = aws_codepipeline.backend.name
+    queue    = aws_codepipeline.queue.name
   }
 }
 
