@@ -8,14 +8,17 @@ export default function Complete() {
   return (
     <div className="complete">
       <div className="check">✓</div>
-      <h1>예약 & 결제 완료!</h1>
+      <h1>예약이 완료되었습니다</h1>
+      <p className="muted">결제가 정상 처리되었고, 예약 내역을 아래에서 확인하세요.</p>
       {r ? (
         <div className="ticket">
-          <p>예약번호 <b>#{r.id}</b></p>
-          <p>공연 <b>{r.concertTitle}</b></p>
-          <p>좌석 <b>{r.seatNo}</b> ({r.grade})</p>
-          <p>결제 <b>{Number(r.amount).toLocaleString()}원</b> · {r.paymentMethod} · {r.paymentStatus}</p>
-          <p className="muted">승인번호 {r.transactionId}</p>
+          <div className="ticket-row"><span>예약번호</span><b>#{r.id}</b></div>
+          <div className="ticket-row"><span>공연</span><b>{r.concertTitle}</b></div>
+          {r.concertDate && <div className="ticket-row"><span>일시</span><b>{new Date(r.concertDate).toLocaleString('ko-KR')}</b></div>}
+          <div className="ticket-row"><span>좌석</span><b>{r.seatNo} ({r.grade})</b></div>
+          <div className="ticket-row"><span>결제금액</span><b>{Number(r.amount).toLocaleString()}원</b></div>
+          <div className="ticket-row"><span>결제수단</span><b>{r.paymentMethod} · {r.paymentStatus}</b></div>
+          <div className="ticket-row"><span>승인번호</span><b>{r.transactionId}</b></div>
           <p className="kakao">💬 카카오 알림톡으로 예약 확정 안내를 보냈습니다.</p>
         </div>
       ) : <p className="muted">예약 정보가 없습니다.</p>}

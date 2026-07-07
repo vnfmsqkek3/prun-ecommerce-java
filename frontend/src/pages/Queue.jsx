@@ -6,16 +6,18 @@ export default function Queue() {
   const { concertId } = useParams()
   const nav = useNavigate()
   const [info, setInfo] = useState(null)
+  const [admitted, setAdmitted] = useState(false)
   const tokenRef = useRef(null)
   const timer = useRef(null)
 
   useEffect(() => {
     let alive = true
 
-    const go = () => {
-      // 입장 성공 → 좌석 선택으로. 토큰은 sessionStorage 로 전달
+    const onAdmit = () => {
+      // 입장 가능 상태 — 자동 이동하지 않고 '입장하기' 버튼을 띄운다
+      clearInterval(timer.current)
       sessionStorage.setItem(`token:${concertId}`, tokenRef.current)
-      nav(`/seats/${concertId}`)
+      if (alive) setAdmitted(true)
     }
 
     const poll = async () => {
@@ -23,38 +25,47 @@ export default function Queue() {
         const { data } = await api.get(`/api/queue/${concertId}/status`, { params: { token: tokenRef.current } })
         if (!alive) return
         setInfo(data)
-        if (data.status === 'ONGOING') { clearInterval(timer.current); go() }
+        if (data.status === 'ONGOING') onAdmit()
       } catch { /* keep polling */ }
     }
 
-    // 1) 대기열 입장
     api.post(`/api/queue/${concertId}/enter`, null, { params: { userId: userId() } })
       .then(({ data }) => {
         if (!alive) return
         tokenRef.current = data.token
         setInfo(data)
-        if (data.status === 'ONGOING') { go(); return }
-        timer.current = setInterval(poll, 2000) // 2초마다 순번 폴링
+        if (data.status === 'ONGOING') onAdmit()
+        else timer.current = setInterval(poll, 2000)
       })
       .catch(() => setInfo({ status: 'ERROR' }))
 
     return () => { alive = false; clearInterval(timer.current) }
-  }, [concertId, nav])
+  }, [concertId])
+
+  const enterNow = () => nav(`/seats/${concertId}`)
 
   return (
     <div className="queue">
       <h1>대기열</h1>
       {!info && <p className="muted">대기열 입장 중…</p>}
-      {info?.status === 'WAIT' && (
+
+      {admitted ? (
+        <div className="queue-box">
+          <div className="big">🎉</div>
+          <p><b>입장하실 차례입니다!</b></p>
+          <p className="muted">아래 버튼을 누르면 좌석 선택으로 이동합니다.</p>
+          <button onClick={enterNow}>입장하기</button>
+        </div>
+      ) : info?.status === 'WAIT' ? (
         <div className="queue-box">
           <div className="big">{info.position}</div>
           <p>내 앞으로 <b>{info.position - 1}</b>명 대기중</p>
           <p className="muted">전체 대기 {info.waitingTotal}명 · 잠시만 기다려 주세요</p>
           <div className="spinner" />
         </div>
-      )}
-      {info?.status === 'ONGOING' && <p>입장! 좌석 선택으로 이동합니다…</p>}
-      {info?.status === 'ERROR' && <p className="err">대기열 입장에 실패했습니다.</p>}
+      ) : info?.status === 'ERROR' ? (
+        <p className="err">대기열 입장에 실패했습니다.</p>
+      ) : null}
     </div>
   )
 }
