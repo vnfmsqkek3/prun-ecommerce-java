@@ -38,7 +38,7 @@ provider "aws" {
     tags = {
       Environment = title(var.environment)
       Project     = var.project
-      Service     = "ecommerce"
+      Service     = "ticket"
       Username    = "czy1023"
     }
   }
@@ -62,7 +62,7 @@ locals {
   common_tags = {
     Environment = title(var.environment)
     Project     = var.project
-    Service     = "ecommerce"
+    Service     = "ticket"
     Username    = "czy1023"
   }
 
