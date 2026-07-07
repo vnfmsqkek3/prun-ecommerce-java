@@ -11,9 +11,10 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Redis Sorted Set 기반 대기열 ("redis" 프로파일에서 활성). 스케일아웃/운영용.
+ * Redis Sorted Set 기반 대기열 ("redis" 프로파일, 스케일아웃/운영용).
  *   waiting:concert:{id}  ZSET  member=token, score=진입시각(ms)
  *   active:concert:{id}   ZSET  member=token, score=만료시각(ms)
+ * complete(예약완료) → 슬롯 즉시 회수 + 다음 대기자 바로 승격.
  */
 @Service
 @Profile("redis")
@@ -27,8 +28,6 @@ public class RedisQueueService implements QueueService {
 
     @Value("${queue.capacity:3}")
     private int capacity;
-    @Value("${queue.admit-batch:1}")
-    private int admitBatch;
     @Value("${queue.active-ttl-seconds:600}")
     private long activeTtlSeconds;
 
@@ -74,6 +73,7 @@ public class RedisQueueService implements QueueService {
     @Override
     public void complete(Long concertId, String token) {
         redis.opsForZSet().remove(active(concertId), token);
+        promoteConcert(concertId, Instant.now().toEpochMilli());
     }
 
     @Override
@@ -81,32 +81,34 @@ public class RedisQueueService implements QueueService {
         Set<String> concerts = redis.opsForSet().members(CONCERTS);
         if (concerts == null) return;
         long now = Instant.now().toEpochMilli();
-        for (String c : concerts) {
-            long concertId = Long.parseLong(c);
-            cleanExpired(concertId, now);
-            Long activeCount = redis.opsForZSet().zCard(active(concertId));
-            long slots = capacity - (activeCount == null ? 0 : activeCount);
-            if (slots <= 0) continue;
+        for (String c : concerts) promoteConcert(Long.parseLong(c), now);
+    }
+
+    private void promoteConcert(long concertId, long now) {
+        cleanExpired(concertId, now);
+        Long activeCount = redis.opsForZSet().zCard(active(concertId));
+        long slots = capacity - (activeCount == null ? 0 : activeCount);
+        if (slots > 0) {
             Set<ZSetOperations.TypedTuple<String>> popped =
-                    redis.opsForZSet().popMin(waiting(concertId), Math.min(slots, admitBatch));
+                    redis.opsForZSet().popMin(waiting(concertId), slots);
             if (popped != null) {
                 for (ZSetOperations.TypedTuple<String> t : popped) {
                     if (t.getValue() != null) admit(concertId, t.getValue(), now);
                 }
             }
-            Long remaining = redis.opsForZSet().zCard(waiting(concertId));
-            if (remaining == null || remaining == 0) redis.opsForSet().remove(CONCERTS, c);
         }
+        Long remaining = redis.opsForZSet().zCard(waiting(concertId));
+        if (remaining == null || remaining == 0) redis.opsForSet().remove(CONCERTS, String.valueOf(concertId));
     }
 
-    private void admit(Long concertId, String token, long now) {
+    private void admit(long concertId, String token, long now) {
         redis.opsForZSet().add(active(concertId), token, now + activeTtlSeconds * 1000);
     }
 
-    private void cleanExpired(Long concertId, long now) {
+    private void cleanExpired(long concertId, long now) {
         redis.opsForZSet().removeRangeByScore(active(concertId), 0, now);
     }
 
-    private String waiting(Long concertId) { return WAITING + concertId; }
-    private String active(Long concertId) { return ACTIVE + concertId; }
+    private String waiting(long concertId) { return WAITING + concertId; }
+    private String active(long concertId) { return ACTIVE + concertId; }
 }

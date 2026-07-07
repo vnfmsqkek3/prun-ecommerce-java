@@ -13,21 +13,21 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
- * 인메모리 대기열 (기본, 외부 의존 없음 → 코드로 바로 실행).
- * 동작은 Redis 구현과 동일한 의미: waiting(FIFO=진입순) → active(만료시각 보유).
- * 단일 인스턴스 전용(스케일아웃 시 Redis 구현으로 전환).
+ * 인메모리 대기열 (기본, 외부 의존 없음).
+ * 흐름: waiting(FIFO) → active(만료시각 보유). 슬롯이 비면 다음 대기자 즉시 승격.
+ *   - 예약완료(complete) → 슬롯 즉시 회수 → 다음 대기자 바로 입장 (핵심 경로)
+ *   - active TTL 만료 → 이탈한 슬롯 회수 (비상장치)
+ *   - 스케줄러 → 위 상황을 짧은 주기로 반영
  */
 @Service
 @Profile("!redis")
 public class InMemoryQueueService implements QueueService {
 
     private final Map<Long, ConcurrentLinkedQueue<String>> waiting = new ConcurrentHashMap<>();
-    private final Map<Long, Map<String, Long>> active = new ConcurrentHashMap<>(); // token -> 만료시각(ms)
+    private final Map<Long, Map<String, Long>> active = new ConcurrentHashMap<>();
 
     @Value("${queue.capacity:3}")
     private int capacity;
-    @Value("${queue.admit-batch:1}")
-    private int admitBatch;
     @Value("${queue.active-ttl-seconds:600}")
     private long activeTtlSeconds;
 
@@ -66,23 +66,28 @@ public class InMemoryQueueService implements QueueService {
         return exp != null && exp > Instant.now().toEpochMilli();
     }
 
+    /** 예약완료/취소 → 슬롯 즉시 회수 + 다음 대기자 바로 승격 */
     @Override
     public synchronized void complete(Long concertId, String token) {
         activeMap(concertId).remove(token);
+        promoteConcert(concertId, Instant.now().toEpochMilli());
     }
 
     @Override
     public synchronized void promoteAll() {
         long now = Instant.now().toEpochMilli();
         for (Long concertId : new ArrayList<>(waiting.keySet())) {
-            cleanExpired(concertId, now);
-            long slots = capacity - activeMap(concertId).size();
-            long toAdmit = Math.min(slots, admitBatch);
-            for (long i = 0; i < toAdmit; i++) {
-                String token = waitQueue(concertId).poll();
-                if (token == null) break;
-                admit(concertId, token, now);
-            }
+            promoteConcert(concertId, now);
+        }
+    }
+
+    /** capacity 가 찰 때까지 대기열 앞에서부터 입장시킴 */
+    private void promoteConcert(Long concertId, long now) {
+        cleanExpired(concertId, now);
+        while (activeMap(concertId).size() < capacity) {
+            String t = waitQueue(concertId).poll();
+            if (t == null) break;
+            admit(concertId, t, now);
         }
     }
 

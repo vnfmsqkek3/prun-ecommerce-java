@@ -8,38 +8,41 @@ export default function Queue() {
   const [info, setInfo] = useState(null)
   const [admitted, setAdmitted] = useState(false)
   const tokenRef = useRef(null)
-  const timer = useRef(null)
+  const enteredRef = useRef(false) // StrictMode 이중 실행에도 입장은 1번만
+  const timerRef = useRef(null)
 
   useEffect(() => {
     let alive = true
 
-    const onAdmit = () => {
-      // 입장 가능 상태 — 자동 이동하지 않고 '입장하기' 버튼을 띄운다
-      clearInterval(timer.current)
-      sessionStorage.setItem(`token:${concertId}`, tokenRef.current)
-      if (alive) setAdmitted(true)
-    }
-
     const poll = async () => {
+      if (!tokenRef.current) return
       try {
         const { data } = await api.get(`/api/queue/${concertId}/status`, { params: { token: tokenRef.current } })
         if (!alive) return
         setInfo(data)
-        if (data.status === 'ONGOING') onAdmit()
+        if (data.status === 'ONGOING') {
+          clearInterval(timerRef.current)
+          sessionStorage.setItem(`token:${concertId}`, tokenRef.current)
+          setAdmitted(true)
+        }
       } catch { /* keep polling */ }
     }
 
-    api.post(`/api/queue/${concertId}/enter`, null, { params: { userId: userId() } })
-      .then(({ data }) => {
-        if (!alive) return
+    const enter = async () => {
+      if (enteredRef.current) return
+      enteredRef.current = true
+      try {
+        const { data } = await api.post(`/api/queue/${concertId}/enter`, null, { params: { userId: userId() } })
         tokenRef.current = data.token
-        setInfo(data)
-        if (data.status === 'ONGOING') onAdmit()
-        else timer.current = setInterval(poll, 2000)
-      })
-      .catch(() => setInfo({ status: 'ERROR' }))
+        if (alive) setInfo(data)
+      } catch {
+        if (alive) setInfo({ status: 'ERROR' })
+      }
+    }
 
-    return () => { alive = false; clearInterval(timer.current) }
+    enter()
+    timerRef.current = setInterval(poll, 1500)
+    return () => { alive = false; clearInterval(timerRef.current) }
   }, [concertId])
 
   const enterNow = () => nav(`/seats/${concertId}`)
