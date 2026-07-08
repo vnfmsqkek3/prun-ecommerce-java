@@ -30,7 +30,7 @@ queue_instance_type        = "t3.small"
 queue_asg_min_size         = 1
 queue_asg_max_size         = 4
 queue_asg_desired_capacity = 1
-queue_capacity             = 100
+queue_capacity             = 1
 
 # RDS MySQL Multi-AZ
 db_instance_class       = "db.t3.small"
