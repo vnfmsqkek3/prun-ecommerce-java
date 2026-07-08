@@ -252,6 +252,11 @@ variable "queue_capacity" {
   type        = number
   default     = 100
 }
+variable "queue_active_ttl_seconds" {
+  description = "입장(active) 후 예약 미완료 시 슬롯 자동 회수까지 시간(초). 이 시간 지나면 뒤 대기자 승격."
+  type        = number
+  default     = 60
+}
 
 # ---------- 카카오 알림톡 (미설정 시 백엔드가 콘솔 로그) ----------
 variable "kakao_api_url" {

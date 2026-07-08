@@ -74,6 +74,14 @@ public class InMemoryQueueService implements QueueService {
     }
 
     @Override
+    public synchronized void leave(Long concertId, String token) {
+        boolean wasActive = activeMap(concertId).remove(token) != null;
+        waitQueue(concertId).remove(token);
+        // 활성 슬롯을 반납했으면 다음 대기자 승격. 대기만 하다 나간 경우는 인원만 감소.
+        if (wasActive) promoteConcert(concertId, Instant.now().toEpochMilli());
+    }
+
+    @Override
     public synchronized void promoteAll() {
         long now = Instant.now().toEpochMilli();
         for (Long concertId : new ArrayList<>(waiting.keySet())) {

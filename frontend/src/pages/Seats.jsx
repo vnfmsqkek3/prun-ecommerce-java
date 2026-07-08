@@ -20,12 +20,28 @@ export default function Seats() {
   const [method, setMethod] = useState('CARD')
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
+  const [remaining, setRemaining] = useState(null) // 예약 제한시간(초)
 
   const load = () => api.get(`/api/concerts/${concertId}/seats`).then(r => setSeats(r.data))
 
   useEffect(() => {
     if (!token) { nav(`/queue/${concertId}`); return } // 토큰 없이 들어오면 대기열로
     load()
+    // 예약 제한시간 카운트다운 — 시간 초과 시 슬롯이 서버에서 자동 회수되므로 대기열로 되돌림
+    const expiresAt = Number(sessionStorage.getItem(`expiresAt:${concertId}`)) || (Date.now() + 60000)
+    const tick = setInterval(() => {
+      const sec = Math.ceil((expiresAt - Date.now()) / 1000)
+      if (sec <= 0) {
+        clearInterval(tick)
+        sessionStorage.removeItem(`token:${concertId}`)
+        sessionStorage.removeItem(`expiresAt:${concertId}`)
+        alert('예약 제한시간이 초과되어 대기열로 돌아갑니다.')
+        nav(`/queue/${concertId}`, { replace: true })
+      } else {
+        setRemaining(sec)
+      }
+    }, 500)
+    return () => clearInterval(tick)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -52,6 +68,11 @@ export default function Seats() {
   return (
     <div className="seats">
       <h1>좌석 선택 & 결제</h1>
+      {remaining != null && (
+        <p className={remaining <= 10 ? 'err' : 'muted'}>
+          ⏱ 예약 제한시간 <b>{remaining}</b>초 · 시간 초과 시 대기열로 돌아갑니다
+        </p>
+      )}
       <div className="stage">STAGE</div>
       <div className="seatmap">
         {rows.map(row => (

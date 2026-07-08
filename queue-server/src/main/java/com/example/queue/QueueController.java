@@ -42,4 +42,10 @@ public class QueueController {
     public void complete(@PathVariable Long concertId, @RequestParam String token) {
         service.complete(concertId, token);
     }
+
+    /** 대기/입장 중 이탈 — 대기열에서 제거(대기 인원 감소). sendBeacon 으로도 호출됨. */
+    @PostMapping("/{concertId}/leave")
+    public void leave(@PathVariable Long concertId, @RequestParam String token) {
+        service.leave(concertId, token);
+    }
 }

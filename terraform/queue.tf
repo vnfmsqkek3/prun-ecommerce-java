@@ -134,6 +134,7 @@ locals {
     redis_host      = aws_elasticache_replication_group.session.primary_endpoint_address
     redis_port      = 6379
     queue_capacity  = var.queue_capacity
+    active_ttl      = var.queue_active_ttl_seconds
     backend_url     = "http://${aws_lb.internal.dns_name}" # 프록시 대상 — 내부 ALB2
   }))
 }

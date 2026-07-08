@@ -31,6 +31,7 @@ queue_asg_min_size         = 1
 queue_asg_max_size         = 4
 queue_asg_desired_capacity = 1
 queue_capacity             = 1
+queue_active_ttl_seconds   = 60 # 입장 후 60초 미예약 시 자동 회수 → 다음 대기자 승격
 
 # RDS MySQL Multi-AZ
 db_instance_class       = "db.t3.small"

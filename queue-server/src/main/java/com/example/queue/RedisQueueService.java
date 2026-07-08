@@ -77,6 +77,16 @@ public class RedisQueueService implements QueueService {
     }
 
     @Override
+    public void leave(Long concertId, String token) {
+        Long removedActive = redis.opsForZSet().remove(active(concertId), token);
+        redis.opsForZSet().remove(waiting(concertId), token);
+        // 활성 슬롯을 반납했으면 다음 대기자 승격. 대기만 하다 나간 경우는 인원만 감소.
+        if (removedActive != null && removedActive > 0) {
+            promoteConcert(concertId, Instant.now().toEpochMilli());
+        }
+    }
+
+    @Override
     public void promoteAll() {
         Set<String> concerts = redis.opsForSet().members(CONCERTS);
         if (concerts == null) return;

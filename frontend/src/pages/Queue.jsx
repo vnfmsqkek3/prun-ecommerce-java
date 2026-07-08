@@ -9,6 +9,7 @@ export default function Queue() {
   const [admitted, setAdmitted] = useState(false)
   const tokenRef = useRef(null)
   const enteredRef = useRef(false) // StrictMode 이중 실행에도 입장은 1번만
+  const admittedRef = useRef(false) // 입장 완료 여부 (이탈 시 대기표 반납 판단)
   const timerRef = useRef(null)
 
   useEffect(() => {
@@ -30,6 +31,9 @@ export default function Queue() {
         setInfo(data)
         if (data.status === 'ONGOING') {
           clearInterval(timerRef.current)
+          admittedRef.current = true
+          sessionStorage.setItem(`token:${concertId}`, tokenRef.current)
+          sessionStorage.setItem(`expiresAt:${concertId}`, data.expiresAt) // 좌석페이지 카운트다운용
           setAdmitted(true)
         }
       } catch { /* keep polling */ }
@@ -57,7 +61,16 @@ export default function Queue() {
 
     enter()
     timerRef.current = setInterval(poll, 1500)
-    return () => { alive = false; clearInterval(timerRef.current) }
+    return () => {
+      alive = false
+      clearInterval(timerRef.current)
+      // 대기 중 페이지 이탈(다른 화면으로 이동) → 대기표 반납해 대기 인원 감소.
+      // 입장 완료(admitted)면 좌석페이지로 가는 것이므로 유지. (새로고침/탭닫기는 unmount 안 타서 토큰 보존)
+      if (!admittedRef.current && tokenRef.current) {
+        navigator.sendBeacon(`/api/queue/${concertId}/leave?token=${tokenRef.current}`)
+        sessionStorage.removeItem(`token:${concertId}`)
+      }
+    }
   }, [concertId])
 
   const enterNow = () => nav(`/seats/${concertId}`)
