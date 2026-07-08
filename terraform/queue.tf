@@ -32,6 +32,10 @@ resource "aws_security_group" "queue" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+  # queue_from_int_alb(standalone) 규칙과 공존 — 인라인 재조정으로 지워지지 않게.
+  lifecycle {
+    ignore_changes = [ingress]
+  }
   tags = merge(local.common_tags, { Name = "${local.name_prefix}-pri-sg-queue" })
 }
 
@@ -170,7 +174,7 @@ resource "aws_autoscaling_group" "queue" {
   max_size                  = var.queue_asg_max_size
   desired_capacity          = var.queue_asg_desired_capacity
   vpc_zone_identifier       = [for s in aws_subnet.private_app : s.id]
-  target_group_arns         = [aws_lb_target_group.queue.arn]
+  target_group_arns         = [aws_lb_target_group.queue.arn, aws_lb_target_group.queue_internal.arn]
   health_check_type         = "ELB"
   health_check_grace_period = var.asg_health_check_grace_seconds
   wait_for_capacity_timeout = "0"

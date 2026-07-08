@@ -19,10 +19,17 @@ export default function Queue() {
       try {
         const { data } = await api.get(`/api/queue/${concertId}/status`, { params: { token: tokenRef.current } })
         if (!alive) return
+        if (data.status === 'EXPIRED') {
+          // 저장된 토큰이 만료됨 → 새로 발급
+          sessionStorage.removeItem(`token:${concertId}`)
+          tokenRef.current = null
+          enteredRef.current = false
+          enter()
+          return
+        }
         setInfo(data)
         if (data.status === 'ONGOING') {
           clearInterval(timerRef.current)
-          sessionStorage.setItem(`token:${concertId}`, tokenRef.current)
           setAdmitted(true)
         }
       } catch { /* keep polling */ }
@@ -31,9 +38,17 @@ export default function Queue() {
     const enter = async () => {
       if (enteredRef.current) return
       enteredRef.current = true
+      // 새로고침 시 기존 대기표 재사용 — 매번 새 토큰을 뽑으면 대기열 뒤로 다시 줄서 순번이 계속 밀린다.
+      const saved = sessionStorage.getItem(`token:${concertId}`)
+      if (saved) {
+        tokenRef.current = saved
+        poll()
+        return
+      }
       try {
         const { data } = await api.post(`/api/queue/${concertId}/enter`, null, { params: { userId: userId() } })
         tokenRef.current = data.token
+        sessionStorage.setItem(`token:${concertId}`, data.token) // 대기 중에도 즉시 저장(새로고침 대비)
         if (alive) setInfo(data)
       } catch {
         if (alive) setInfo({ status: 'ERROR' })

@@ -15,7 +15,7 @@ locals {
     db_name             = var.db_name
     db_username         = var.db_master_username
     db_password_param   = aws_ssm_parameter.db_password.name
-    queue_server_url    = "http://${aws_lb.api.dns_name}" # 같은 ALB /api/queue 로 라우팅
+    queue_server_url    = "http://${aws_lb.internal.dns_name}" # 내부 ALB2 /api/queue → 큐 (ALB1 은 internet-facing 이라 백엔드 도달 불가)
     kakao_api_url       = var.kakao_api_url
     kakao_api_key       = var.kakao_api_key
     kakao_sender_key    = var.kakao_sender_key

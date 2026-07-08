@@ -1,6 +1,7 @@
 package com.example.ticketing.client;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
@@ -13,7 +14,12 @@ public class QueueClient {
     private final RestClient client;
 
     public QueueClient(@Value("${queue-server.url:http://localhost:8081}") String baseUrl) {
-        this.client = RestClient.builder().baseUrl(baseUrl).build();
+        // 타임아웃 필수 — 큐 미도달 시 무한 대기하면 예약 요청 전체가 hang 된다.
+        // 초과 시 예외 → isValid()=false(403) 로 빠르게 실패.
+        SimpleClientHttpRequestFactory rf = new SimpleClientHttpRequestFactory();
+        rf.setConnectTimeout(2000);
+        rf.setReadTimeout(3000);
+        this.client = RestClient.builder().baseUrl(baseUrl).requestFactory(rf).build();
     }
 
     public boolean isValid(Long concertId, String token) {
