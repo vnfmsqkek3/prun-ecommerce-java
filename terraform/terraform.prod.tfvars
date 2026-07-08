@@ -3,13 +3,13 @@
 # =============================================================================
 
 # Project / Region
-aws_region  = "ap-northeast-2" # Seoul (앱 타임존 Asia/Seoul 과 일치)
+aws_region  = "us-east-1" # N. Virginia
 environment = "prod"
 project     = "furn"
 
 # Network — /20 (4096 IP), 5 tier × 2 AZ = 10 subnets (각 /24)
 vpc_cidr   = "10.100.0.0/20"
-az_letters = ["a", "c"] # ap-northeast-2a, ap-northeast-2c → suffix "an2a", "an2c"
+az_letters = ["a", "b"] # us-east-1a, us-east-1b
 
 # keyless — 접속은 EC2 Instance Connect Endpoint 로. (key pair 쓰려면 ssh_key_name 설정)
 
@@ -20,10 +20,17 @@ github_branch = "main"
 
 # Backend (app) ASG
 app_instance_type              = "m5.large"
-app_asg_min_size               = 2
+app_asg_min_size               = 1
 app_asg_max_size               = 4
-app_asg_desired_capacity       = 2
+app_asg_desired_capacity       = 1
 app_asg_target_cpu_utilization = 70
+
+# Queue server ASG (API 서버와 독립 — 인스턴스 타입/스케일 별도 조절)
+queue_instance_type        = "t3.small"
+queue_asg_min_size         = 1
+queue_asg_max_size         = 4
+queue_asg_desired_capacity = 1
+queue_capacity             = 100
 
 # RDS MySQL Multi-AZ
 db_instance_class       = "db.t3.small"

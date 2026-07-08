@@ -42,8 +42,10 @@ resource "aws_lb_listener" "api_http" {
   port              = 80
   protocol          = "HTTP"
 
+  # 대기열 서버가 프록시 진입점 — 모든 트래픽을 큐(:8081)로. 큐가 /api/queue 는 자체 처리,
+  # 그 외 /api/** 는 내부 ALB2(백엔드)로 포워딩. (백엔드는 이제 ALB1 에 직접 붙지 않음)
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.api.arn
+    target_group_arn = aws_lb_target_group.queue.arn
   }
 }

@@ -118,18 +118,8 @@ resource "aws_lb_target_group" "queue" {
   tags = merge(local.common_tags, { Name = "${local.name_prefix}-pri-queue-tg" })
 }
 
-resource "aws_lb_listener_rule" "queue" {
-  listener_arn = aws_lb_listener.api_http.arn
-  priority     = 10
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.queue.arn
-  }
-  condition {
-    path_pattern { values = ["/api/queue/*"] }
-  }
-}
+# ALB1 리스너 기본 동작이 이미 큐 TG 로 포워딩(alb.tf) — 경로 규칙 불필요.
+# 큐 서버가 /api/queue 는 자체 처리, 그 외 /api/** 는 ALB2(백엔드)로 프록시.
 
 # ---------- Launch Template + ASG ----------
 locals {
@@ -140,6 +130,7 @@ locals {
     redis_host      = aws_elasticache_replication_group.session.primary_endpoint_address
     redis_port      = 6379
     queue_capacity  = var.queue_capacity
+    backend_url     = "http://${aws_lb.internal.dns_name}" # 프록시 대상 — 내부 ALB2
   }))
 }
 

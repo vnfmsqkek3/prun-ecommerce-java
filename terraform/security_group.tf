@@ -30,6 +30,11 @@ resource "aws_security_group" "api_alb" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+  # queue.tf 의 api_alb_from_app(standalone) 규칙과 공존시키기 위해 인라인 ingress 재조정 끔.
+  # (인라인+standalone 혼용 시 Terraform 이 standalone 규칙을 지우려는 footgun 방지)
+  lifecycle {
+    ignore_changes = [ingress]
+  }
   tags = merge(local.common_tags, { Name = "${local.name_prefix}-pub-sg-api-alb" })
 }
 
@@ -40,11 +45,11 @@ resource "aws_security_group" "app" {
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    description     = "HTTP 8080 from API ALB"
+    description     = "HTTP 8080 from internal ALB2 (queue proxy)"
     from_port       = 8080
     to_port         = 8080
     protocol        = "tcp"
-    security_groups = [aws_security_group.api_alb.id]
+    security_groups = [aws_security_group.int_alb.id]
   }
   ingress {
     description     = "SSH from EC2 Instance Connect Endpoint"
@@ -107,6 +112,10 @@ resource "aws_security_group" "cache" {
     to_port         = 6379
     protocol        = "tcp"
     security_groups = [aws_security_group.app.id]
+  }
+  # queue.tf 의 cache_from_queue(standalone) 규칙과 공존시키기 위해 인라인 ingress 재조정 끔.
+  lifecycle {
+    ignore_changes = [ingress]
   }
   tags = merge(local.common_tags, { Name = "${local.name_prefix}-pri-sg-redis" })
 }
